@@ -34,7 +34,7 @@ export default function Signup() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!form.name || !form.email || !form.password || !form.confirmPassword) {
+    if (!form.name.trim() || !form.phone.trim() || !form.studentId.trim() || !form.email || !form.password || !form.confirmPassword) {
       setError('请填写所有必填项');
       return;
     }
@@ -52,14 +52,14 @@ export default function Signup() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: form.name,
+          name: form.name.trim(),
           email: form.email,
           password: form.password,
           confirmPassword: form.confirmPassword,
           role: 'student',
-          studentId: form.studentId || undefined,
+          studentId: form.studentId.trim(),
           dormRoom: form.dormRoom || undefined,
-          phone: form.phone || undefined,
+          phone: form.phone.trim(),
         }),
       });
       const data = await res.json() as { status: string; message?: string; detail?: string };
@@ -85,7 +85,7 @@ export default function Signup() {
               <Wrench className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">创建账户</h1>
-            <p className="text-muted-foreground mt-1">加入智能宿舍报修平台</p>
+            <p className="text-muted-foreground mt-1">加入后勤报修平台</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -94,6 +94,7 @@ export default function Signup() {
                 <label className="block text-sm font-medium text-foreground mb-1">姓名 <span className="text-red-500">*</span></label>
                 <input
                   type="text"
+                  required
                   value={form.name}
                   onChange={(e) => handleChange('name', e.target.value)}
                   placeholder="请输入姓名"
@@ -101,9 +102,10 @@ export default function Signup() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">手机号</label>
+                <label className="block text-sm font-medium text-foreground mb-1">手机号 <span className="text-red-500">*</span></label>
                 <input
                   type="tel"
+                  required
                   value={form.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
                   placeholder="请输入手机号"
@@ -114,9 +116,10 @@ export default function Signup() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">学号</label>
+                <label className="block text-sm font-medium text-foreground mb-1">学号 <span className="text-red-500">*</span></label>
                 <input
                   type="text"
+                  required
                   value={form.studentId}
                   onChange={(e) => handleChange('studentId', e.target.value)}
                   placeholder="请输入学号"
@@ -129,7 +132,7 @@ export default function Signup() {
                   type="text"
                   value={form.dormRoom}
                   onChange={(e) => handleChange('dormRoom', e.target.value)}
-                  placeholder="如：A校3-201"
+                  placeholder="如：3-201"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 />
               </div>

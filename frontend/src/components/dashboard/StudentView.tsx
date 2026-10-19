@@ -4,14 +4,16 @@ import { authFetch, API, readApiMessage } from '../../lib/api';
 import { toast } from 'sonner';
 import { RepairRequest, ApiResponse, PaginatedApiResponse } from '../../types';
 import {
-  Plus, Star, ChevronRight, RefreshCw, Send, ClipboardList, Sparkles
+  Plus, Star, ChevronRight, RefreshCw, Send, ClipboardList
 } from 'lucide-react';
 import EvaluationModal from '../custom/EvaluationModal';
 import Pagination from '../custom/Pagination';
-import RepairComments from '../custom/RepairComments';
 import { Badge, SlaBadge } from '../shared/StatusBadge';
 import ConsumedPartsList from '../shared/ConsumedPartsList';
-import { tCat, tStatus, tPriority, STATUS_COLOR, PRIORITY_COLOR } from '../shared/constants';
+import {
+  tCat, tStatus, tPriority, STATUS_COLOR, PRIORITY_COLOR,
+  DORM_BUILDING_GROUPS, FAULT_CATEGORY_GROUPS,
+} from '../shared/constants';
 
 export default function StudentView({ token }: { token: string | null }) {
   const { language, t } = useLanguage();
@@ -24,12 +26,10 @@ export default function StudentView({ token }: { token: string | null }) {
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalTarget, setEvalTarget] = useState<RepairRequest | null>(null);
   const [form, setForm] = useState({
-    dormBuilding: '', dormRoom: '', category: 'water',
+    dormBuilding: '', dormRoom: '', category: '',
     description: '', priority: 'normal', imageUrl: '',
   });
-
-  const [aiAnalyzing, setAiAnalyzing] = useState(false);
-  const [aiDiagnosisText, setAiDiagnosisText] = useState('');
+  const roomRequired = form.dormBuilding.startsWith('公寓');
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -53,7 +53,7 @@ export default function StudentView({ token }: { token: string | null }) {
 
   async function submitRepair(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.dormBuilding || !form.dormRoom || !form.description) {
+    if (!form.dormBuilding || (roomRequired && !form.dormRoom.trim()) || !form.category || !form.description) {
       toast.error(language === 'zh' ? '请填写所有必填项' : 'Please fill in all required fields'); return;
     }
     setSubmitting(true);
@@ -72,8 +72,7 @@ export default function StudentView({ token }: { token: string | null }) {
       const data = await res.json() as ApiResponse<RepairRequest>;
       if (data.success) {
         toast.success(language === 'zh' ? '报修申请提交成功！' : 'Repair request submitted successfully!');
-        setForm({ dormBuilding: '', dormRoom: '', category: 'water', description: '', priority: 'normal', imageUrl: '' });
-        setAiDiagnosisText('');
+        setForm({ dormBuilding: '', dormRoom: '', category: '', description: '', priority: 'normal', imageUrl: '' });
         setCurrentPage(1);
         setView('list');
         loadRequests();
@@ -88,7 +87,7 @@ export default function StudentView({ token }: { token: string | null }) {
   }
 
   /** 提交评价（通过新接口） */
-  async function handleEvaluate(rating: number, tags: string[], text: string) {
+  async function handleEvaluate(rating: number) {
     if (!evalTarget) return;
     setEvalLoading(true);
     try {
@@ -96,8 +95,6 @@ export default function StudentView({ token }: { token: string | null }) {
         method: 'POST',
         body: JSON.stringify({
           rating,
-          feedbackTags: tags.join(','),
-          feedbackText: text || undefined,
         }),
       });
       const data = await res.json() as ApiResponse<RepairRequest>;
@@ -117,7 +114,7 @@ export default function StudentView({ token }: { token: string | null }) {
     return (
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => { setView('list'); setAiDiagnosisText(''); }} className="text-muted-foreground hover:text-foreground">
+          <button onClick={() => setView('list')} className="text-muted-foreground hover:text-foreground">
             <ChevronRight className="w-5 h-5 rotate-180" />
           </button>
           <h2 className="text-xl font-bold text-foreground">{t('requestRepair')}</h2>
@@ -127,25 +124,50 @@ export default function StudentView({ token }: { token: string | null }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">{t('dormBuilding')} <span className="text-red-500">*</span></label>
-                <input value={form.dormBuilding} onChange={(e) => setForm(p => ({ ...p, dormBuilding: e.target.value }))}
-                  placeholder={language === 'zh' ? "如：A栋、1号楼" : "e.g., Bldg A, Bldg 1"} className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition" />
+                <select
+                  required
+                  value={form.dormBuilding}
+                  onChange={(e) => setForm((p) => ({ ...p, dormBuilding: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                >
+                  <option value="" disabled>{language === 'zh' ? '请选择楼栋' : 'Select building'}</option>
+                  {DORM_BUILDING_GROUPS.map((group) => (
+                    <optgroup key={group.group} label={group.group}>
+                      {group.options.map((building) => (
+                        <option key={building} value={building}>{building}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">{t('roomNumber')} <span className="text-red-500">*</span></label>
-                <input value={form.dormRoom} onChange={(e) => setForm(p => ({ ...p, dormRoom: e.target.value }))}
-                  placeholder="e.g., 301" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition" />
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  {t('roomNumber')} {roomRequired && <span className="text-red-500">*</span>}
+                </label>
+                <input value={form.dormRoom} required={roomRequired} onChange={(e) => setForm(p => ({ ...p, dormRoom: e.target.value }))}
+                  placeholder={roomRequired ? '如：301' : (language === 'zh' ? '公共区域可不填，或填写具体位置' : 'Optional for public areas; enter a specific location if needed')}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition" />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">{t('faultCategory')}</label>
-                <select value={form.category} onChange={(e) => setForm(p => ({ ...p, category: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition">
-                  <option value="water">{t('cat_water')}</option>
-                  <option value="electricity">{t('cat_electricity')}</option>
-                  <option value="furniture">{t('cat_furniture')}</option>
-                  <option value="network">{t('cat_network')}</option>
-                  <option value="other">{t('cat_other')}</option>
+                <label className="block text-sm font-medium text-foreground mb-1">{t('faultCategory')} <span className="text-red-500">*</span></label>
+                <select
+                  required
+                  value={form.category}
+                  onChange={(e) => setForm(p => ({ ...p, category: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                >
+                  <option value="" disabled>{language === 'zh' ? '请选择故障分类' : 'Select category'}</option>
+                  {FAULT_CATEGORY_GROUPS.map((g) => (
+                    <optgroup key={g.group} label={g.group}>
+                      {g.options.map((opt) => (
+                        <option key={opt.value} value={opt.value} disabled={opt.disabled}>
+                          {tCat(opt.value, t)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </select>
               </div>
               <div>
@@ -208,8 +230,6 @@ export default function StudentView({ token }: { token: string | null }) {
                         formData.append('file', file);
 
                         setSubmitting(true);
-                        setAiAnalyzing(true);
-                        setAiDiagnosisText('');
                         try {
                           const res = await authFetch(API.UPLOAD, token, {
                             method: 'POST',
@@ -222,23 +242,6 @@ export default function StudentView({ token }: { token: string | null }) {
                             setForm(p => ({ ...p, imageUrl: currentUrls.join(',') }));
                             toast.success(language === 'zh' ? '图片上传成功！' : 'Image uploaded successfully!');
 
-                            // Trigger AI Vision pre-inspection
-                            try {
-                              const aiFormData = new FormData();
-                              aiFormData.append('file', file);
-                              const aiRes = await authFetch(API.REPAIRS.ANALYZE_IMAGE, token, {
-                                method: 'POST',
-                                body: aiFormData,
-                              });
-                              const aiData = await aiRes.json() as { success: boolean; data?: { category: string; diagnosis: string } };
-                              if (aiData.success && aiData.data) {
-                                setForm(p => ({ ...p, category: aiData.data.category }));
-                                setAiDiagnosisText(aiData.data.diagnosis);
-                                toast.success(language === 'zh' ? '🤖 宿宝 AI 视觉分析推荐分类完成' : '🤖 Subao AI Vision analysis recommended category!');
-                              }
-                            } catch (err) {
-                              console.error('AI vision analysis error:', err);
-                            }
                           } else {
                             toast.error(data.message || (language === 'zh' ? '图片上传失败' : 'Image upload failed'));
                           }
@@ -246,7 +249,6 @@ export default function StudentView({ token }: { token: string | null }) {
                           toast.error(language === 'zh' ? '上传图片时发生网络错误' : 'Network error during image upload');
                         } finally {
                           setSubmitting(false);
-                          setAiAnalyzing(false);
                         }
                       }}
                     />
@@ -258,32 +260,8 @@ export default function StudentView({ token }: { token: string | null }) {
               </div>
             </div>
 
-            {/* AI Diagnosis Animation & Result */}
-            {(aiAnalyzing || aiDiagnosisText) && (
-              <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-2 animate-fadeIn">
-                <div className="flex items-center gap-2 text-primary">
-                  <Sparkles className={`w-4 h-4 ${aiAnalyzing ? 'animate-spin' : 'animate-bounce-subtle'}`} />
-                  <span className="text-xs font-semibold uppercase tracking-wider">
-                    {aiAnalyzing ? t('aiDiagnosis') : (language === 'zh' ? '🤖 宿宝 AI 视觉预检诊断' : '🤖 Subao AI Vision Pre-inspection')}
-                  </span>
-                </div>
-                {aiAnalyzing ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    <span className="text-xs text-muted-foreground">{language === 'zh' ? '宿宝正在读取您的故障图片...' : 'Subao is analyzing your fault image...'}</span>
-                  </div>
-                ) : (
-                  <p className="text-sm text-foreground/90 font-medium leading-relaxed bg-white/50 p-2.5 rounded-lg border border-primary/5">
-                    {aiDiagnosisText}
-                  </p>
-                )}
-              </div>
-            )}
-
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => { setView('list'); setAiDiagnosisText(''); }}
+              <button type="button" onClick={() => setView('list')}
                 className="flex-1 py-3 rounded-xl border border-border text-foreground font-medium hover:bg-muted transition">
                 {t('cancel')}
               </button>
@@ -310,7 +288,7 @@ export default function StudentView({ token }: { token: string | null }) {
         <div className="bg-white rounded-2xl shadow-sm border border-border p-6 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-lg font-semibold text-foreground">{selected.dormBuilding} {selected.dormRoom}</p>
+              <p className="text-lg font-semibold text-foreground">{selected.dormBuilding}{selected.dormRoom ? ` ${selected.dormRoom}` : ''}</p>
               <p className="text-sm text-muted-foreground mt-0.5">{tCat(selected.category, t)}</p>
             </div>
             <div className="flex flex-col items-end gap-1">
@@ -365,20 +343,9 @@ export default function StudentView({ token }: { token: string | null }) {
                   <Star key={s} className={`w-5 h-5 ${s <= selected.rating! ? 'text-yellow-400 fill-current' : 'text-gray-200'}`} />
                 ))}
               </div>
-              {selected.feedbackTags && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {selected.feedbackTags.split(',').map((tag) => (
-                    <span key={tag} className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{tag}</span>
-                  ))}
-                </div>
-              )}
-              {selected.feedbackText && (
-                <p className="text-sm text-muted-foreground bg-muted rounded-lg px-3 py-2">{selected.feedbackText}</p>
-              )}
             </div>
           )}
           <ConsumedPartsList repairId={selected.id} token={token} status={selected.status} />
-          <RepairComments repairId={selected.id} token={token} />
         </div>
 
       </div>
@@ -421,7 +388,7 @@ export default function StudentView({ token }: { token: string | null }) {
                 <div className="flex-1 min-w-0 cursor-pointer"
                   onClick={() => { setSelected(r); setView('detail'); }}>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-foreground">{r.dormBuilding} {r.dormRoom}</span>
+                    <span className="font-semibold text-foreground">{r.dormBuilding}{r.dormRoom ? ` ${r.dormRoom}` : ''}</span>
                     <Badge label={tCat(r.category, t)} colorClass="bg-gray-100 text-gray-700" />
                   </div>
                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{r.description}</p>

@@ -58,7 +58,7 @@ export default function Login() {
             <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4">
               <Wrench className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">智能宿舍报修平台</h1>
+            <h1 className="text-2xl font-bold text-foreground">后勤报修平台</h1>
             <p className="text-muted-foreground mt-1">登录您的账户</p>
           </div>
 

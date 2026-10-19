@@ -10,10 +10,20 @@ from fastapi.responses import StreamingResponse
 
 from database import get_db, VALID_STATUSES, STATUS_LABELS
 from auth import verify_token, require_admin
-from models import CreateRepairRequest, UpdateRepairStatus, AnalyzeRepairRequest, EvaluateRequest
-from services.ai_service import _get_ai_analysis, ai_dispatch
+from models import CreateRepairRequest, UpdateRepairStatus, EvaluateRequest
+from repair_taxonomy import DORM_BUILDINGS, DORM_APARTMENT_BUILDINGS, VALID_CATEGORIES, CATEGORY_TO_SKILL
 
 router = APIRouter()
+
+
+def _mask_phone(phone: Optional[str]) -> str:
+    """Hide the middle four digits while a technician has not started the task."""
+    if not phone:
+        return ""
+    digits = "".join(char for char in phone if char.isdigit())
+    if len(digits) < 8:
+        return "*" * len(digits)
+    return f"{digits[:3]}****{digits[-4:]}"
 
 
 @router.get("/api/repairs")
@@ -69,6 +79,7 @@ async def get_repairs(
         data_query = f"""
             SELECT r.*,
                    u.name as studentName,
+                   u.phone as studentPhone,
                    t.name as assignedToName
             FROM repairs r
             LEFT JOIN users u ON r.studentId = u.id
@@ -88,6 +99,16 @@ async def get_repairs(
         conn.close()
 
     data = [dict(r) for r in rows]
+    for repair in data:
+        phone = repair.pop("studentPhone", None)
+        # 联系电话仅返回给该工单的维修人员。待接单（pending/approved）脱敏；
+        # 维修人员开始处理后显示完整号码，便于联系预约上门。
+        if role == "technician":
+            repair["studentPhone"] = (
+                _mask_phone(phone)
+                if repair.get("status") in ("pending", "approved")
+                else (phone or "")
+            )
     if page is not None and pageSize is not None:
         return {
             "success": True,
@@ -100,17 +121,11 @@ async def get_repairs(
         return {"success": True, "data": data, "total": total}
 
 
-@router.post("/api/repairs/analyze")
-async def analyze_repair(payload: AnalyzeRepairRequest, current_user: dict = Depends(verify_token)):
-    cat, pri, eng = await _get_ai_analysis(payload.description)
-    return {
-        "success": True,
-        "data": {
-            "category": cat,
-            "priority": pri,
-            "engine": eng
-        }
-    }
+# AI 文本分析接口暂时屏蔽；普通报修流程不依赖此接口。
+# @router.post("/api/repairs/analyze")
+# async def analyze_repair(payload: AnalyzeRepairRequest, current_user: dict = Depends(verify_token)):
+#     cat, pri, eng = await _get_ai_analysis(payload.description)
+#     return {"success": True, "data": {"category": cat, "priority": pri, "engine": eng}}
 
 
 @router.post("/api/repairs")
@@ -121,20 +136,25 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
     if role != "student":
         raise HTTPException(status_code=403, detail="只有学生可以提交报修申请")
 
-    if payload.category not in ("water", "electricity", "furniture", "network", "other"):
+    if payload.category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail="报修类型无效")
 
     if payload.priority not in ("low", "normal", "high", "urgent"):
         raise HTTPException(status_code=400, detail="优先级无效")
 
-    if not payload.dormBuilding.strip() or not payload.dormRoom.strip() or not payload.description.strip():
+    if payload.dormBuilding.strip() not in DORM_BUILDINGS:
+        raise HTTPException(status_code=400, detail="楼栋无效")
+
+    building = payload.dormBuilding.strip()
+    room = payload.dormRoom.strip()
+    if not building or (building in DORM_APARTMENT_BUILDINGS and not room) or not payload.description.strip():
         raise HTTPException(status_code=400, detail="请填写所有必填项")
 
-    if len(payload.description.strip()) < 5:
-        raise HTTPException(status_code=400, detail="问题描述至少需要5个字")
+    # if len(payload.description.strip()) < 5:
+    #     raise HTTPException(status_code=400, detail="问题描述至少需要5个字")
 
-    # 运行后台静默双轨 AI 分类与评级评估
-    ai_cat, ai_pri, _ = await _get_ai_analysis(payload.description)
+    # AI 分类/评级暂时停用；对应数据库列仍保留并写入 NULL，不改动数据库结构。
+    ai_cat, ai_pri = None, None
 
     repair_id = str(uuid.uuid4())
     now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
@@ -151,7 +171,11 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
         admin_note = None
 
         techs = conn.execute("SELECT id, name, skills FROM users WHERE role = 'technician'").fetchall()
-        matching_techs = [t for t in techs if t['skills'] and payload.category in t['skills']]
+        skill_group = CATEGORY_TO_SKILL.get(payload.category)
+        matching_techs = [
+            t for t in techs
+            if skill_group and t['skills'] and skill_group in [s.strip() for s in t['skills'].split(',')]
+        ]
 
         if matching_techs:
             # 收集每位候选维修员的综合数据
@@ -184,28 +208,17 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
                 })
 
             if candidates:
-                # 尝试 LLM 智能派单
-                dispatch_result = await ai_dispatch(payload.description, payload.category, payload.priority, candidates)
-
-                if dispatch_result:
-                    # LLM 成功决策
-                    assigned_to = dispatch_result["techId"]
-                    status = "approved"
-                    tech_name = next((c["name"] for c in candidates if c["id"] == assigned_to), "未知")
-                    reason = dispatch_result["reason"]
-                    admin_note = f"[🤖 AI智能派单] {reason}，已分配给：{tech_name}"
-                else:
-                    # LLM 失败 → 降级到规则（最小负载）
-                    best = min(candidates, key=lambda c: c["activeTasks"])
-                    assigned_to = best["id"]
-                    status = "approved"
-                    admin_note = f"[⚙️ 规则派单] 技能匹配+负载均衡（当前 {best['activeTasks']} 单），自动分配给：{best['name']}"
+                # AI 派单暂时屏蔽，保留原有技能匹配与最小负载规则派单。
+                best = min(candidates, key=lambda c: c["activeTasks"])
+                assigned_to = best["id"]
+                status = "approved"
+                admin_note = f"[系统派单] 技能匹配+负载均衡（当前 {best['activeTasks']} 单），自动分配给：{best['name']}"
 
         conn.execute(
             """INSERT INTO repairs
                (id, studentId, dormBuilding, dormRoom, category, description, imageUrl, status, priority, assignedTo, adminNote, slaDueDate, slaBreached, aiCategory, aiPriority, createdAt, updatedAt)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (repair_id, user_id, payload.dormBuilding, payload.dormRoom, payload.category,
+            (repair_id, user_id, building, room, payload.category,
              payload.description, payload.imageUrl, status, payload.priority, assigned_to, admin_note, sla_due_date, 0, ai_cat, ai_pri, now, now),
         )
 
@@ -229,7 +242,7 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
     finally:
         conn.close()
 
-    print(f"[/api/repairs] Repair created: {repair_id} by {current_user.get('name')}. AI Silently Evaluated: {ai_cat} ({ai_pri})")
+    print(f"[/api/repairs] Repair created: {repair_id} by {current_user.get('name')}")
     return {"success": True, "data": dict(row)}
 
 
@@ -387,16 +400,17 @@ async def evaluate_repair(repair_id: str, payload: EvaluateRequest, current_user
 
         conn.execute(
             """UPDATE repairs
-               SET rating = ?, feedbackTags = ?, feedbackText = ?, status = 'closed', updatedAt = ?
+               SET rating = ?, status = 'closed', updatedAt = ?
                WHERE id = ?""",
-            (payload.rating, payload.feedbackTags, payload.feedbackText, now, repair_id),
+            (payload.rating, now, repair_id),
         )
         conn.commit()
 
         review_id = str(uuid.uuid4())
+        # 仅保存星级；评论字段保留在数据库中但不再写入用户评语。
         conn.execute(
             "INSERT INTO reviews (id, requestId, studentId, rating, comment, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
-            (review_id, repair_id, user_id, payload.rating, payload.feedbackText, now),
+            (review_id, repair_id, user_id, payload.rating, None, now),
         )
         conn.commit()
 

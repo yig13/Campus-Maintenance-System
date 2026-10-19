@@ -4,6 +4,7 @@ import time
 import random
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
+from repair_taxonomy import DORM_BUILDINGS, DORM_APARTMENT_BUILDINGS
 
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
@@ -40,9 +41,9 @@ def seed():
     print("👤 Creating accounts...")
     accounts = [
         ("管理员", "admin@example.com", "admin123", "admin", None, None, "13800000000", None),
-        ("学生测试", "student@example.com", "student123", "student", "20230001", "A302", "13800000001", None),
-        ("水电工张师傅", "tech1@example.com", "tech123", "technician", None, None, "13800000002", "water,electricity"),
-        ("网络家具李师傅", "tech2@example.com", "tech123", "technician", None, None, "13800000003", "network,furniture"),
+        ("学生测试", "student@example.com", "student123", "student", "20230001", "1-302", "13800000001", None),
+        ("维修测试水电", "tech1@example.com", "tech123", "technician", None, None, "13800000002", "water,electricity"),
+        ("维修测试综合", "tech2@example.com", "tech123", "technician", None, None, "13800000003", "furniture,other"),
     ]
 
     now = now_str()
@@ -54,20 +55,20 @@ def seed():
 
     # ========== 模拟用户 ==========
     students_data = [
-        ("陈小明", "chenxm@qq.com", "20230101", "A-301", "13800138001"),
-        ("李雨涵", "liyuh@163.com", "20230102", "A-302", "13800138002"),
-        ("张伟", "zhangw@126.com", "20230205", "B-205", "13800138003"),
-        ("王芳", "wangf@qq.com", "20230210", "B-310", "13800138004"),
-        ("刘洋", "liuy@gmail.com", "20230301", "C-101", "13800138005"),
-        ("赵静", "zhaoj@163.com", "20230315", "C-215", "13800138006"),
-        ("孙浩然", "sunhr@qq.com", "20230401", "D-401", "13800138007"),
-        ("周晓燕", "zhouxy@126.com", "20230410", "D-502", "13800138008"),
+        ("陈小明", "chenxm@qq.com", "20230101", "1-301", "13800138001"),
+        ("李雨涵", "liyuh@163.com", "20230102", "2-302", "13800138002"),
+        ("张伟", "zhangw@126.com", "20230205", "3-205", "13800138003"),
+        ("王芳", "wangf@qq.com", "20230210", "4-310", "13800138004"),
+        ("刘洋", "liuy@gmail.com", "20230301", "5-101", "13800138005"),
+        ("赵静", "zhaoj@163.com", "20230315", "6-215", "13800138006"),
+        ("孙浩然", "sunhr@qq.com", "20230401", "7-401", "13800138007"),
+        ("周晓燕", "zhouxy@126.com", "20230410", "8-502", "13800138008"),
     ]
 
     techs_data = [
-        ("李师傅", "tech_li@qq.com", "water,electricity"),
-        ("王师傅", "tech_wang@qq.com", "furniture,network"),
-        ("赵师傅", "tech_zhao@qq.com", "water,furniture,electricity"),
+        ("李师傅", "tech_li@qq.com", "13800138011", "water,electricity"),
+        ("王师傅", "tech_wang@qq.com", "13800138012", "furniture,other"),
+        ("赵师傅", "tech_zhao@qq.com", "13800138013", "water,furniture,electricity,other"),
     ]
 
     student_ids = []
@@ -78,29 +79,33 @@ def seed():
             (uid, name, email, pwd_context.hash("123456"), "student", sid, room, phone, now_str(random_dt(30, 40))))
 
     tech_ids = []
-    for name, email, skills in techs_data:
+    for name, email, phone, skills in techs_data:
         uid = rid()
         tech_ids.append(uid)
-        cursor.execute("INSERT INTO users (id,name,email,password,role,skills,createdAt) VALUES (?,?,?,?,?,?,?)",
-            (uid, name, email, pwd_context.hash("123456"), "technician", skills, now_str(random_dt(30, 40))))
+        cursor.execute("INSERT INTO users (id,name,email,password,role,phone,skills,createdAt) VALUES (?,?,?,?,?,?,?,?)",
+            (uid, name, email, pwd_context.hash("123456"), "technician", phone, skills, now_str(random_dt(30, 40))))
 
     print(f"  {len(students_data)} students + {len(techs_data)} technicians created")
 
     # ========== 报修工单 ==========
     print("🔧 Creating repair tickets...")
     templates = [
-        ("water", "high", ["宿舍卫生间水龙头一直滴水关不紧", "洗手台下水管漏水地面总是湿的", "淋浴花洒水压不够水流很小", "卫生间马桶冲水后一直有水流声"]),
-        ("water", "urgent", ["宿舍水管爆裂水漫金山急需处理！", "楼上漏水到我们宿舍天花板在滴水"]),
-        ("electricity", "normal", ["宿舍插座松了插头插不稳", "阳台灯开关接触不良需要按好几次才亮", "空调遥控器失灵空调无法正常开关"]),
-        ("electricity", "high", ["宿舍突然跳闸整间没电了", "插座冒烟了很危险请尽快维修"]),
-        ("electricity", "urgent", ["卫生间插座漏电有触电危险！紧急！"]),
-        ("furniture", "normal", ["书桌抽屉轨道坏了拉不出来", "椅子腿松了坐着摇摇晃晃", "衣柜门合页松了门关不紧", "床架有异响翻身嘎吱嘎吱响"]),
-        ("furniture", "low", ["窗户把手有点松不影响使用但想修一下", "门锁有点涩需要润滑"]),
-        ("network", "high", ["宿舍网络完全连不上明天有线上考试", "校园网一直断线影响学习"]),
-        ("network", "normal", ["网速特别慢下载文件要等很久", "WiFi信号时断时续很不稳定", "网口指示灯不亮无法有线上网"]),
+        ("sink", "high", ["洗手池下方软管接口漏水，地面持续积水", "洗漱台排水缓慢，检查后发现下水管渗漏"]),
+        ("cold_faucet", "normal", ["公共区域冷水龙头关不严，持续滴水", "洗手池冷水龙头开关松动，出水不稳定"]),
+        ("cold_pipe", "urgent", ["冷水管接口破裂并持续喷水，请尽快处理", "冷水管道漏水已影响周边区域通行"]),
+        ("toilet_clog", "high", ["卫生间排水堵塞，冲水后水位上涨", "卫生间下水不畅，现已无法正常使用"]),
+        ("heat_pump", "high", ["空气能热水器无法正常加热，设备显示故障", "热水设备运行中断，请检查热水器"]),
+        ("shower", "normal", ["花洒出水量明显变小，接口处有漏水", "淋浴花洒损坏，需要检查并更换"]),
+        ("lamp", "normal", ["走廊灯具不亮，检查后确认灯泡故障", "公共区域照明灯闪烁，影响正常通行"]),
+        ("trip", "urgent", ["区域配电箱开关跳闸，复位后再次跳闸", "该楼层突然断电，请检查线路和配电开关"]),
+        ("outlet", "high", ["墙面插座松动，插头无法稳定接触", "插座面板发热并有异味，请优先检查"]),
+        ("switch", "normal", ["照明开关接触不良，需要多次按压才能开启", "墙面开关按键松动，无法正常控制灯具"]),
+        ("ac", "normal", ["空调无法启动，遥控器和电源检查后仍无响应", "空调运行时有异响且制冷效果变差"]),
+        ("desk", "low", ["办公桌抽屉滑轨卡住，无法顺畅拉开", "桌椅连接处松动，使用时有明显晃动"]),
+        ("lock", "high", ["公共区域门锁无法正常闭合", "门锁卡顿，钥匙转动困难"]),
+        ("leak", "urgent", ["天花板持续渗水，地面已有积水", "屋面漏水导致室内墙面和地面潮湿"]),
+        ("office", "normal", ["办公设备无法正常开机，请检查电源和设备接口", "公共区域打印设备卡纸且无法继续工作"]),
     ]
-
-    buildings = ["A栋", "B栋", "C栋", "D栋"]
     statuses = [("closed", 0.45), ("completed", 0.10), ("pending_evaluation", 0.08),
                 ("in_progress", 0.12), ("approved", 0.10), ("pending", 0.10), ("rejected", 0.05)]
 
@@ -126,8 +131,8 @@ def seed():
         cat, pri, descs = random.choice(templates)
         desc = random.choice(descs)
         student_id = random.choice(student_ids)
-        building = random.choice(buildings)
-        room_num = random.randint(101, 608)
+        building = random.choice(DORM_BUILDINGS)
+        room_num = str(random.randint(101, 608)) if building in DORM_APARTMENT_BUILDINGS else ""
         created_dt = random_dt(2, 25)
         created = now_str(created_dt)
 
@@ -149,7 +154,7 @@ def seed():
         if status in ("approved", "in_progress", "completed", "pending_evaluation", "closed"):
             assigned_to = random.choice(tech_ids)
             tech_idx = tech_ids.index(assigned_to)
-            admin_note = f"[🤖 AI智能派单] 根据技能匹配与空闲度，自动分配给：{techs_data[tech_idx][0]}"
+            admin_note = f"[系统派单] 根据技能匹配与空闲度，自动分配给：{techs_data[tech_idx][0]}"
 
         work_note = random.choice(work_notes) if status in ("completed", "pending_evaluation", "closed") else None
 
@@ -177,9 +182,9 @@ def seed():
              assignedTo,adminNote,workNote,rating,feedbackTags,feedbackText,slaDueDate,slaBreached,
              aiCategory,aiPriority,createdAt,updatedAt)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (repair_id, student_id, building, str(room_num), cat, desc, None, status, pri,
+            (repair_id, student_id, building, room_num, cat, desc, None, status, pri,
              assigned_to, admin_note, work_note, rating, feedback_tags, feedback_text, sla_due, sla_breached,
-             cat, pri, created, now_str(updated_dt)))
+             None, None, created, now_str(updated_dt)))
 
     print(f"  {len(repair_ids)} repair tickets created")
 
@@ -231,11 +236,14 @@ def seed():
     # ========== 公告 ==========
     print("📢 Creating announcements...")
     anns = [
-        ("五一假期宿舍安全提醒", "各位同学五一假期期间请注意宿舍安全离开前请关闭电源锁好门窗如有紧急报修请联系宿管"),
-        ("宿舍热水系统维护通知", "本周三下午2点-5点进行热水系统管道维护期间热水供应暂停请同学们提前做好准备"),
-        ("新学期报修流程说明", "新学期开始如需报修请通过系统在线提交维修师傅会在24小时内响应紧急情况请直接联系宿管"),
+        ("请遵守国家法律法规，禁止提交含有人身攻击、侮辱、诽谤、骚扰、侵害他人隐私、猥亵、淫秽色情、反动言论、虚假信息、有害内容或胁迫性文字的工单。"),
+        ("报修工单用于受理公寓寝室内各类设施、设备的故障报修问题，处理范围包括：水电、门窗、锁具、家具、家电等问题。网络故障不属于报修工单处理范围。"),
+        ("寝室号格式为“楼栋号-房间号”（例如：5-302）"),
+        ("除卫生间堵塞等情况外，需拍摄现场照片，确保维修人员能直接识别问题。拍摄照片时请注意防止泄露个人隐私，避免出现广告、标语等无关内容，禁止使用修改、涂抹、添加滤镜文字或拼接图片。"),
     ]
-    for title, content in anns:
+    # 保留当前公告正文不变；这些公告以正文列表维护，生成稳定的展示标题。
+    for announcement_index, content in enumerate(anns, start=1):
+        title = f"后勤公告{announcement_index}"
         cursor.execute("INSERT INTO announcements (id,title,content,authorId,createdAt) VALUES (?,?,?,?,?)",
             (rid(), title, content, random.choice(tech_ids), now_str(random_dt(5, 20))))
     print(f"  {len(anns)} announcements created")
@@ -274,7 +282,7 @@ def seed():
     print("  Admin:     admin@example.com / admin123")
     print("  Student:   student@example.com / student123")
     print("  Tech (水): tech1@example.com / tech123")
-    print("  Tech (网): tech2@example.com / tech123")
+    print("  Tech (综合): tech2@example.com / tech123")
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ export default function LandingPage() {
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center hover:scale-105 active:scale-95 transition">
             <Wrench className="w-4 h-4 text-white" />
           </div>
-          <span className="text-lg font-bold text-foreground hidden sm:block hover:text-primary transition">智能宿舍报修平台</span>
+          <span className="text-lg font-bold text-foreground hidden sm:block hover:text-primary transition">后勤报修平台</span>
         </div>
         <div className="flex items-center gap-3">
           <Link
@@ -48,7 +48,7 @@ export default function LandingPage() {
               </span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-md">
-              专为现代化校园打造。状态实时追踪，服务评价闭环，让后勤维保流程清晰可见。
+              面向校园各类设施报修。状态实时追踪，服务评价清晰可见，让后勤维修流程更加顺畅。
             </p>
             <div className="flex flex-col sm:flex-row gap-4 pt-2">
               <Link
@@ -89,7 +89,7 @@ export default function LandingPage() {
               <div className="p-3 bg-gray-50 rounded-xl space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">位置</span>
-                  <span className="font-medium text-foreground">502 宿舍</span>
+                  <span className="font-medium text-foreground">综合楼 502</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">类型</span>
@@ -174,7 +174,7 @@ export default function LandingPage() {
             立即登录
             <ArrowRight className="w-5 h-5" />
           </Link>
-          <p className="text-xs text-muted-foreground mt-8">© 2026 智能宿舍报修平台 · 校园后勤管理系统</p>
+          <p className="text-xs text-muted-foreground mt-8">© 2026 后勤报修平台 · 校园后勤管理系统</p>
         </div>
       </section>
     </div>

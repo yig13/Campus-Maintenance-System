@@ -23,6 +23,13 @@ async def get_stats(current_user: dict = Depends(verify_token)):
             completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE status IN ('completed', 'pending_evaluation', 'closed')").fetchone()[0]
             rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'rejected'").fetchone()[0]
             category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs GROUP BY category").fetchall()
+            building_rows = conn.execute(
+                """SELECT dormBuilding as building, COUNT(*) as count
+                   FROM repairs
+                   WHERE TRIM(COALESCE(dormBuilding, '')) != ''
+                   GROUP BY dormBuilding
+                   ORDER BY count DESC, dormBuilding ASC"""
+            ).fetchall()
         elif role == "technician":
             total = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ?", (user_id,)).fetchone()[0]
             pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'pending'", (user_id,)).fetchone()[0]
@@ -30,6 +37,7 @@ async def get_stats(current_user: dict = Depends(verify_token)):
             completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status IN ('completed', 'pending_evaluation', 'closed')", (user_id,)).fetchone()[0]
             rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'rejected'", (user_id,)).fetchone()[0]
             category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs WHERE assignedTo = ? GROUP BY category", (user_id,)).fetchall()
+            building_rows = []
         else:
             total = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ?", (user_id,)).fetchone()[0]
             pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'pending'", (user_id,)).fetchone()[0]
@@ -37,6 +45,7 @@ async def get_stats(current_user: dict = Depends(verify_token)):
             completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status IN ('completed', 'pending_evaluation', 'closed')", (user_id,)).fetchone()[0]
             rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'rejected'", (user_id,)).fetchone()[0]
             category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs WHERE studentId = ? GROUP BY category", (user_id,)).fetchall()
+            building_rows = []
 
         total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         student_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'student'").fetchone()[0]
@@ -47,6 +56,7 @@ async def get_stats(current_user: dict = Depends(verify_token)):
         conn.close()
 
     category_stats = [{"category": r["category"], "count": r["count"]} for r in category_rows]
+    building_stats = [{"building": r["building"], "count": r["count"]} for r in building_rows]
 
     try:
         conn = get_db()
@@ -107,6 +117,7 @@ async def get_stats(current_user: dict = Depends(verify_token)):
             "studentCount": student_count,
             "technicianCount": technician_count,
             "categoryStats": category_stats,
+            "buildingStats": building_stats,
             "avgRating": f"{avg_rating_row or 0:.1f}",
             "reviewCount": reviews,
             "trendData": trend_data,

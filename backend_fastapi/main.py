@@ -17,10 +17,9 @@ from routes import (
     notification_routes,
     announcement_routes,
     stats_routes,
-    ai_routes,
 )
 
-app = FastAPI(title="Dorm Repair API")
+app = FastAPI(title="Facilities Maintenance API")
 
 # 保持对后台任务的引用，防止被 GC 回收
 _sla_task: asyncio.Task | None = None
@@ -66,9 +65,13 @@ for mod in [
     notification_routes,
     announcement_routes,
     stats_routes,
-    ai_routes,
 ]:
     app.include_router(mod.router)
+
+# AI 助手路由暂时屏蔽：聊天、模型配置和图片预检接口不注册。
+# 数据库结构及历史配置数据保持不变，恢复时可重新注册 ai_routes。
+# 评论接口位于 review_routes.comments_router，但此处仅注册 review_routes.router（星级评价）；
+# 因此评论讨论 API 保持停用，不影响评分、任务状态和维修流程。
 
 
 def _sla_task_done_callback(task: asyncio.Task):

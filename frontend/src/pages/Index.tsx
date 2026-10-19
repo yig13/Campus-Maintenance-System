@@ -13,7 +13,6 @@ import AnnouncementsBanner from '../components/custom/AnnouncementsBanner';
 import StudentView from '../components/dashboard/StudentView';
 import TechnicianView from '../components/dashboard/TechnicianView';
 import AdminView from '../components/dashboard/AdminView';
-import SubaoChatWidget from '../components/dashboard/SubaoChatWidget';
 import SettingsModal from '../components/dashboard/SettingsModal';
 import { Badge } from '../components/shared/StatusBadge';
 
@@ -156,7 +155,6 @@ export default function Index() {
         initialProfile={displayProfile}
         onProfileUpdated={loadProfile}
       />
-      <SubaoChatWidget token={token} role={displayProfile.role} />
     </div>
   );
 }

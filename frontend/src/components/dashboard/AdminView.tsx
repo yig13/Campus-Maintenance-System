@@ -6,17 +6,15 @@ import { toast } from 'sonner';
 import {
   Wrench, ClipboardList, BarChart2, Users,
   Star, CheckCircle, Clock,
-  RefreshCw, Eye, Shield, Bot
+  RefreshCw, Eye, Shield
 } from 'lucide-react';
 import { API, authFetch, readApiMessage } from '../../lib/api';
 import Pagination from '../custom/Pagination';
-import RepairComments from '../custom/RepairComments';
 import AdminPartsTab from './AdminPartsTab';
-import AdminAIConfigsTab from './AdminAIConfigsTab';
 import { Badge } from '../shared/StatusBadge';
 import { SlaBadge } from '../shared/StatusBadge';
 import ConsumedPartsList from '../shared/ConsumedPartsList';
-import { tCat, tStatus, tPriority, CATEGORY_LABEL, PRIORITY_COLOR, STATUS_COLOR } from '../shared/constants';
+import { tCat, tStatus, tPriority, CATEGORY_LABEL, CATEGORY_DISPLAY_GROUP, TECHNICIAN_SKILL_OPTIONS, PRIORITY_COLOR, STATUS_COLOR } from '../shared/constants';
 import {
   ResponsiveContainer,
   PieChart, Pie, Cell, Tooltip, Legend,
@@ -26,7 +24,7 @@ import {
 
 export default function AdminView({ token }: { token: string | null }) {
   const { language, t } = useLanguage();
-  const [tab, setTab] = useState<'repairs' | 'stats' | 'parts' | 'users' | 'ai'>('repairs');
+  const [tab, setTab] = useState<'repairs' | 'stats' | 'parts' | 'users'>('repairs');
   const [repairs, setRepairs] = useState<RepairRequest[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [technicians, setTechnicians] = useState<User[]>([]);
@@ -248,10 +246,17 @@ export default function AdminView({ token }: { token: string | null }) {
 
   const filteredRepairs = repairs;
 
-  const pieData = stats?.categoryStats?.map(({ category, count }) => ({
-    name: tCat(category, t) || category,
-    value: count
-  })) || [];
+  const pieTotals = new Map<string, number>();
+  stats?.categoryStats?.forEach(({ category, count }) => {
+    const group = CATEGORY_DISPLAY_GROUP[category];
+    if (group) pieTotals.set(group, (pieTotals.get(group) || 0) + count);
+  });
+  const pieData = (['appliance', 'general', 'other', 'hotWater'] as const)
+    .filter((group) => (pieTotals.get(group) || 0) > 0)
+    .map((group) => ({
+      name: t(`category_${group}`),
+      value: pieTotals.get(group) || 0,
+    }));
 
   const barData = stats ? [
     { name: t('status_pending'), count: stats.pendingRequests, color: '#f59e0b' },
@@ -270,8 +275,7 @@ export default function AdminView({ token }: { token: string | null }) {
           ['repairs', t('tabRepairs'), ClipboardList],
           ['stats', t('tabStats'), BarChart2],
           ['parts', t('tabParts'), Wrench],
-          ['users', t('tabUsers') || '用户管理', Users],
-          ['ai', t('tabAI') || 'AI助手配置', Bot]
+          ['users', t('tabUsers') || '用户管理', Users]
         ] as const).map(([key, label, Icon]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition ${
@@ -299,7 +303,7 @@ export default function AdminView({ token }: { token: string | null }) {
           </div>
           {/* Filter */}
           <div className="flex gap-2 flex-wrap mb-4">
-            {['all', 'pending', 'approved', 'in_progress', 'completed', 'closed', 'rejected'].map((s) => (
+            {['all', 'pending', 'approved', 'in_progress', 'completed', 'pending_evaluation', 'closed', 'rejected'].map((s) => (
               <button key={s} onClick={() => { setFilterStatus(s); setRepairsPage(1); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                   filterStatus === s ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -325,10 +329,10 @@ export default function AdminView({ token }: { token: string | null }) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-foreground">{r.dormBuilding} {r.dormRoom}</span>
+                        <span className="font-semibold text-foreground">{r.dormBuilding}{r.dormRoom ? ` ${r.dormRoom}` : ''}</span>
                         <Badge label={tCat(r.category, t)} colorClass="bg-gray-100 text-gray-700" />
                         <Badge label={tPriority(r.priority, t)} colorClass={PRIORITY_COLOR[r.priority]} />
-                        {r.adminNote?.startsWith('[🤖 AI智能派单]') && (
+                        {r.adminNote?.startsWith('[系统派单]') && (
                           <Badge label={t('dispatchBadge') || '🤖 智能派单'} colorClass="bg-blue-100 text-blue-800 border-blue-200" />
                         )}
                       </div>
@@ -418,7 +422,6 @@ export default function AdminView({ token }: { token: string | null }) {
                         </button>
                       </div>
                       <ConsumedPartsList repairId={r.id} token={token} status={r.status} />
-                      <RepairComments repairId={r.id} token={token} />
                     </form>
                   )}
                 </div>
@@ -477,6 +480,43 @@ export default function AdminView({ token }: { token: string | null }) {
               </div>
             </div>
           )}
+
+          <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
+            <h4 className="font-semibold text-foreground mb-4">
+              {language === 'zh' ? '各楼栋报修数量' : 'Repair Requests by Building'}
+            </h4>
+            {(stats.buildingStats?.length ?? 0) > 0 ? (
+              <div className="w-full">
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={stats.buildingStats} margin={{ top: 10, right: 10, left: -25, bottom: 28 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                    <XAxis
+                      dataKey="building"
+                      stroke="#9ca3af"
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      angle={-35}
+                      textAnchor="end"
+                      height={55}
+                    />
+                    <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip
+                      cursor={{ fill: '#f3f4f6', opacity: 0.5 }}
+                      formatter={(value: number) => [value, language === 'zh' ? '报修单' : 'Requests']}
+                      contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }}
+                    />
+                    <Bar dataKey="count" name={language === 'zh' ? '报修单数' : 'Requests'} fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                {language === 'zh' ? '暂无楼栋报修数据' : 'No building repair data yet'}
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 柱状图：工单状态分布 */}
@@ -683,11 +723,6 @@ export default function AdminView({ token }: { token: string | null }) {
         </div>
       )}
 
-      {/* AI Config Tab */}
-      {tab === 'ai' && (
-        <AdminAIConfigsTab token={token} />
-      )}
-
       {/* Skills Modal */}
       {skillsModalOpen && skillsTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
@@ -699,7 +734,7 @@ export default function AdminView({ token }: { token: string | null }) {
               </button>
             </div>
             <div className="p-4 space-y-3">
-              {['water', 'electricity', 'furniture', 'network', 'other'].map(cat => (
+              {TECHNICIAN_SKILL_OPTIONS.map(cat => (
                 <label key={cat} className="flex items-center gap-3 p-3 rounded-xl border border-border cursor-pointer hover:bg-muted/50 transition">
                   <input type="checkbox" className="w-4 h-4 rounded text-primary focus:ring-primary/50"
                     checked={skillsForm.includes(cat)}
@@ -809,7 +844,7 @@ export default function AdminView({ token }: { token: string | null }) {
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '技能' : 'Skills'}</label>
                 <div className="flex flex-wrap gap-2">
-                  {['water', 'electricity', 'furniture', 'network', 'other'].map(cat => (
+                  {TECHNICIAN_SKILL_OPTIONS.map(cat => (
                     <label key={cat} className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border cursor-pointer hover:bg-muted/50 transition text-xs">
                       <input type="checkbox" className="w-3 h-3 rounded text-primary focus:ring-primary/50"
                         checked={createTechForm.skills.split(',').filter(Boolean).includes(cat)}

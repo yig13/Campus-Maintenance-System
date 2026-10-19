@@ -16,6 +16,8 @@ async def register(payload: SignupRequest):
     # 只允许注册学生账号，维修员和管理员只能由管理员创建
     role = 'student'
 
+    if not payload.name.strip() or not (payload.phone or '').strip() or not (payload.studentId or '').strip():
+        raise HTTPException(status_code=400, detail="姓名、手机号和学号为必填项")
     if "@" not in payload.email:
         raise HTTPException(status_code=400, detail="邮箱格式不正确")
     if len(payload.password) < 6:
@@ -34,8 +36,8 @@ async def register(payload: SignupRequest):
         hashed_password = pwd_context.hash(payload.password or "")
         conn.execute(
             "INSERT INTO users (id, name, email, password, role, studentId, dormRoom, phone, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, payload.name, payload.email, hashed_password, role,
-             payload.studentId, payload.dormRoom, payload.phone, now),
+            (user_id, payload.name.strip(), payload.email, hashed_password, role,
+             payload.studentId.strip(), payload.dormRoom, payload.phone.strip(), now),
         )
         conn.commit()
     finally:

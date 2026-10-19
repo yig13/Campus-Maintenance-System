@@ -16,7 +16,7 @@ export interface RepairRequest {
   studentId?: string;
   dormBuilding: string;
   dormRoom: string;
-  category: 'water' | 'electricity' | 'furniture' | 'network' | 'other';
+  category: string;
   description: string;
   imageUrl?: string;
   status: 'pending' | 'approved' | 'in_progress' | 'completed' | 'pending_evaluation' | 'closed' | 'rejected';
@@ -27,6 +27,7 @@ export interface RepairRequest {
   createdAt: string;
   updatedAt: string;
   studentName?: string;
+  studentPhone?: string;
   assignedToName?: string;
   rating?: number;
   feedbackTags?: string;
@@ -76,6 +77,7 @@ export interface Stats {
   studentCount: number;
   technicianCount: number;
   categoryStats: { category: string; count: number }[];
+  buildingStats?: { building: string; count: number }[];
   avgRating: string;
   reviewCount: number;
   trendData?: { date: string; count: number }[];

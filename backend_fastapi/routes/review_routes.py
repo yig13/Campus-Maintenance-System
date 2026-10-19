@@ -8,6 +8,8 @@ from auth import verify_token
 from models import CreateReviewRequest, CreateCommentRequest
 
 router = APIRouter()
+# 评论功能暂时停用：comments_router 不在 main.py 注册，保留端点实现以便后续恢复。
+comments_router = APIRouter()
 
 
 @router.post("/api/reviews")
@@ -28,7 +30,8 @@ async def create_review(payload: CreateReviewRequest, current_user: dict = Depen
     try:
         conn.execute(
             "INSERT INTO reviews (id, requestId, studentId, rating, comment, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
-            (review_id, payload.requestId, user_id, payload.rating, payload.comment, now),
+            # 评论收集已停用；保留 comment 列兼容现有数据库结构，只保存星级。
+            (review_id, payload.requestId, user_id, payload.rating, None, now),
         )
         conn.commit()
     finally:
@@ -38,7 +41,7 @@ async def create_review(payload: CreateReviewRequest, current_user: dict = Depen
     return {"success": True, "data": {"id": review_id}}
 
 
-@router.get("/api/repairs/{repair_id}/comments")
+@comments_router.get("/api/repairs/{repair_id}/comments")
 async def get_repair_comments(repair_id: str, current_user: dict = Depends(verify_token)):
     conn = get_db()
     try:
@@ -54,7 +57,7 @@ async def get_repair_comments(repair_id: str, current_user: dict = Depends(verif
     return {"success": True, "data": [dict(r) for r in rows]}
 
 
-@router.post("/api/repairs/{repair_id}/comments")
+@comments_router.post("/api/repairs/{repair_id}/comments")
 async def add_repair_comment(repair_id: str, payload: CreateCommentRequest, current_user: dict = Depends(verify_token)):
     user_id = current_user.get("userId", "")
     conn = get_db()

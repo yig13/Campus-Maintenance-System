@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🏠 智能宿舍报修管理系统
+# 🏢 后勤报修平台
 
-**Dormitory Maintenance System**
+**Facilities Maintenance Platform**
 
-一个融合 LLM 智能派单、SLA 时效监控、多角色协作的现代化宿舍报修平台
+面向校园宿舍、教学楼及其他设施的报修与维修协作平台，支持多角色工单管理、SLA 时效监控和维修进度追踪。
 
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=white)
@@ -24,7 +24,7 @@
 
 ## 📌 项目简介
 
-在高校宿舍管理中，传统的报修方式往往面临 **响应慢、流程乱、无法追溯、分配不均** 等痛点。本系统以 **"提交即分配、全程可追踪、数据可量化"** 为核心理念，打造了一个从报修提交到工单结案的全链路数字化管理平台。
+在校园后勤管理中，传统报修方式往往面临 **响应慢、流程乱、无法追溯、分配不均** 等痛点。本平台以 **"在线提交、全程可追踪、数据可量化"** 为核心理念，覆盖宿舍、教学楼等场所的报修提交、维修处理和工单结案流程。
 
 ### 它解决了什么问题？
 

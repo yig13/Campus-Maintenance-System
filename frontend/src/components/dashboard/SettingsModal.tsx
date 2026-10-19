@@ -171,7 +171,7 @@ export default function SettingsModal({
                       value={profileForm.dormRoom}
                       onChange={(e) => setProfileForm(p => ({ ...p, dormRoom: e.target.value }))}
                       className="w-full px-3.5 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition pr-10"
-                      placeholder="如：A-101"
+                      placeholder="如：1-101"
                     />
                   </div>
                 </>

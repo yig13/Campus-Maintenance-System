@@ -6,7 +6,6 @@ import { RepairRequest, Part, ApiResponse } from '../../types';
 import {
   Wrench, Star, RefreshCw, Clock, CheckCircle, BarChart2
 } from 'lucide-react';
-import RepairComments from '../custom/RepairComments';
 import { Badge, SlaBadge } from '../shared/StatusBadge';
 import ConsumedPartsList from '../shared/ConsumedPartsList';
 import { tCat, tStatus, tPriority, STATUS_COLOR, PRIORITY_COLOR } from '../shared/constants';
@@ -147,12 +146,22 @@ export default function TechnicianView({ token }: { token: string | null }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-foreground">{task.dormBuilding} {task.dormRoom}</span>
+                    <span className="font-semibold text-foreground">{task.dormBuilding}{task.dormRoom ? ` ${task.dormRoom}` : ''}</span>
                     <Badge label={tCat(task.category || 'other', t)} colorClass="bg-gray-100 text-gray-700" />
                     {task.priority && <Badge label={tPriority(task.priority, t)} colorClass={PRIORITY_COLOR[task.priority]} />}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
                   {task.studentName && <p className="text-xs text-muted-foreground mt-1">{language === 'zh' ? `学生：${task.studentName}` : `Student: ${task.studentName}`}</p>}
+                  {task.studentPhone && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {language === 'zh' ? '报修人电话：' : 'Student phone: '}
+                      {task.studentPhone.includes('*') ? task.studentPhone : (
+                        <a href={`tel:${task.studentPhone}`} className="text-primary hover:underline">
+                          {task.studentPhone}
+                        </a>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
                   <Badge label={tStatus(task.status, t)} colorClass={STATUS_COLOR[task.status]} />
@@ -178,16 +187,6 @@ export default function TechnicianView({ token }: { token: string | null }) {
                       <Star key={s} className={`w-4 h-4 ${s <= task.rating! ? 'text-yellow-400 fill-current' : 'text-gray-200'}`} />
                     ))}
                   </div>
-                  {task.feedbackTags && (
-                    <div className="flex flex-wrap gap-1 mb-1">
-                      {task.feedbackTags.split(',').map((tag) => (
-                        <span key={tag} className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-xs">{tag}</span>
-                      ))}
-                    </div>
-                  )}
-                  {task.feedbackText && (
-                    <p className="text-xs text-muted-foreground">"{task.feedbackText}"</p>
-                  )}
                 </div>
               )}
               <div className="mt-3 pt-3 border-t border-border">
@@ -270,19 +269,18 @@ export default function TechnicianView({ token }: { token: string | null }) {
                       </>
                     )}
                     <ConsumedPartsList repairId={task.id} token={token} status={task.status} />
-                    <RepairComments repairId={task.id} token={token} />
                     <button onClick={() => { setSelected(null); setWorkNote(''); setSelectedParts({}); }}
                       className="w-full py-2 rounded-xl border border-border text-foreground text-sm hover:bg-muted transition mt-2">
                       {language === 'zh' ? '收起' : 'Collapse'}
                     </button>
                   </div>
 
-                ) : (
+                ) : task.status !== 'completed' && task.status !== 'rejected' && task.status !== 'pending_evaluation' && task.status !== 'closed' ? (
                   <button onClick={() => setSelected(task)}
                     className="w-full py-2 rounded-xl border border-primary text-primary text-sm font-medium hover:bg-primary/5 transition">
-                    {task.status !== 'completed' && task.status !== 'rejected' && task.status !== 'pending_evaluation' && task.status !== 'closed' ? (language === 'zh' ? '更新状态 / 讨论' : 'Update Status / Discuss') : (language === 'zh' ? '查看讨论' : 'View Discussion')}
+                    {language === 'zh' ? '更新状态' : 'Update Status'}
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           ))}

@@ -2,56 +2,32 @@ import React, { useState } from 'react';
 import { Star, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 
-/** 快捷评价标签列表 */
-const FEEDBACK_TAGS = [
-  { label: '响应迅速', emoji: '⚡' },
-  { label: '技术专业', emoji: '🔧' },
-  { label: '态度友好', emoji: '😊' },
-  { label: '现场整洁', emoji: '🧹' },
-  { label: '问题解决', emoji: '✅' },
-  { label: '现场未清理', emoji: '😤' },
-];
-
 interface EvaluationModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (rating: number, tags: string[], text: string) => Promise<void>;
+  onSubmit: (rating: number) => Promise<void>;
   loading: boolean;
 }
 
 export default function EvaluationModal({ open, onClose, onSubmit, loading }: EvaluationModalProps) {
   const [rating, setRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [feedbackText, setFeedbackText] = useState('');
-
-  /** 切换标签选择（多选） */
-  function toggleTag(tag: string) {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
-  }
-
   /** 提交评价 */
   async function handleSubmit() {
     if (rating < 1) {
       toast.error('请选择评分');
       return;
     }
-    await onSubmit(rating, selectedTags, feedbackText);
+    await onSubmit(rating);
     // 重置表单
     setRating(5);
     setHoverRating(0);
-    setSelectedTags([]);
-    setFeedbackText('');
   }
 
   /** 关闭时重置 */
   function handleClose() {
     setRating(5);
     setHoverRating(0);
-    setSelectedTags([]);
-    setFeedbackText('');
     onClose();
   }
 
@@ -75,7 +51,7 @@ export default function EvaluationModal({ open, onClose, onSubmit, loading }: Ev
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-6">
+        <div className="px-6 py-5">
           {/* 星级评分 */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-3">
@@ -106,50 +82,6 @@ export default function EvaluationModal({ open, onClose, onSubmit, loading }: Ev
             </div>
           </div>
 
-          {/* 快捷标签 */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-3">
-              快捷标签 <span className="text-xs text-muted-foreground font-normal">（可多选）</span>
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {FEEDBACK_TAGS.map((tag) => {
-                const isSelected = selectedTags.includes(tag.label);
-                return (
-                  <button
-                    key={tag.label}
-                    type="button"
-                    onClick={() => toggleTag(tag.label)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border-2 transition ${
-                      isSelected
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border bg-background text-foreground hover:border-primary/50'
-                    }`}
-                  >
-                    <span>{tag.emoji}</span>
-                    <span>{tag.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 评语输入 */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              详细评语 <span className="text-xs text-muted-foreground font-normal">（选填）</span>
-            </label>
-            <textarea
-              value={feedbackText}
-              onChange={(e) => setFeedbackText(e.target.value)}
-              rows={3}
-              maxLength={500}
-              placeholder="请分享您的服务体验..."
-              className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition resize-none"
-            />
-            <div className="text-xs text-muted-foreground text-right mt-1">
-              {feedbackText.length}/500
-            </div>
-          </div>
         </div>
 
         {/* 底部按钮 */}
