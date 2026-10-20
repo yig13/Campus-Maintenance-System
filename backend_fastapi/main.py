@@ -13,7 +13,6 @@ from routes import (
     repair_routes,
     user_routes,
     parts_routes,
-    review_routes,
     notification_routes,
     announcement_routes,
     stats_routes,
@@ -61,17 +60,13 @@ for mod in [
     repair_routes,
     user_routes,
     parts_routes,
-    review_routes,
     notification_routes,
     announcement_routes,
     stats_routes,
 ]:
     app.include_router(mod.router)
 
-# AI 助手路由暂时屏蔽：聊天、模型配置和图片预检接口不注册。
-# 数据库结构及历史配置数据保持不变，恢复时可重新注册 ai_routes。
-# 评论接口位于 review_routes.comments_router，但此处仅注册 review_routes.router（星级评价）；
-# 因此评论讨论 API 保持停用，不影响评分、任务状态和维修流程。
+# AI 助手和工单讨论接口已移除；星级评价由 repair_routes 处理。
 
 
 def _sla_task_done_callback(task: asyncio.Task):

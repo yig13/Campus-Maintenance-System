@@ -2,19 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
-import { Eye, EyeOff, Wrench } from 'lucide-react';
+import { Eye, EyeOff, UserRound } from 'lucide-react';
 import { API } from '../../lib/api';
+import { DORM_BUILDING_GROUPS } from '../shared/constants';
 
 export default function Signup() {
-  const { login, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: '',
-    email: '',
     password: '',
     confirmPassword: '',
-    studentId: '',
-    dormRoom: '',
+    userId: '',
+    dormBuilding: '',
     phone: '',
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -34,7 +34,7 @@ export default function Signup() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!form.name.trim() || !form.phone.trim() || !form.studentId.trim() || !form.email || !form.password || !form.confirmPassword) {
+    if (!form.name.trim() || !form.phone.trim() || !form.userId.trim() || !form.dormBuilding || !form.password || !form.confirmPassword) {
       setError('请填写所有必填项');
       return;
     }
@@ -52,13 +52,11 @@ export default function Signup() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: form.name.trim(),
-          email: form.email,
+          username: form.name.trim(),
           password: form.password,
           confirmPassword: form.confirmPassword,
-          role: 'student',
-          studentId: form.studentId.trim(),
-          dormRoom: form.dormRoom || undefined,
+          userId: form.userId.trim(),
+          dormBuilding: form.dormBuilding,
           phone: form.phone.trim(),
         }),
       });
@@ -82,18 +80,19 @@ export default function Signup() {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="flex flex-col items-center mb-6">
             <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4">
-              <Wrench className="w-8 h-8 text-white" />
+              <UserRound className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">创建账户</h1>
-            <p className="text-muted-foreground mt-1">加入后勤报修平台</p>
+            <h1 className="text-2xl font-bold text-foreground">用户注册</h1>
+            <p className="text-muted-foreground mt-1">用户注册后即可提交报修申请</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">姓名 <span className="text-red-500">*</span></label>
                 <input
                   type="text"
+                  autoComplete="off"
                   required
                   value={form.name}
                   onChange={(e) => handleChange('name', e.target.value)}
@@ -105,6 +104,7 @@ export default function Signup() {
                 <label className="block text-sm font-medium text-foreground mb-1">手机号 <span className="text-red-500">*</span></label>
                 <input
                   type="tel"
+                  autoComplete="off"
                   required
                   value={form.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
@@ -116,37 +116,33 @@ export default function Signup() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">学号 <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-foreground mb-1">学号/工号 <span className="text-red-500">*</span></label>
                 <input
                   type="text"
+                  autoComplete="off"
                   required
-                  value={form.studentId}
-                  onChange={(e) => handleChange('studentId', e.target.value)}
-                  placeholder="请输入学号"
+                  value={form.userId}
+                  onChange={(e) => handleChange('userId', e.target.value)}
+                  placeholder="请输入学号/工号"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">宿舍号</label>
-                <input
-                  type="text"
-                  value={form.dormRoom}
-                  onChange={(e) => handleChange('dormRoom', e.target.value)}
-                  placeholder="如：3-201"
+                <label className="block text-sm font-medium text-foreground mb-1">楼栋 <span className="text-red-500">*</span></label>
+                <select
+                  required
+                  value={form.dormBuilding}
+                  onChange={(e) => handleChange('dormBuilding', e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
-                />
+                >
+                  <option value="" disabled>请选择楼栋</option>
+                  {DORM_BUILDING_GROUPS.map((group) => (
+                    <optgroup key={group.group} label={group.group}>
+                      {group.options.map((building) => <option key={building} value={building}>{building}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">邮箱 <span className="text-red-500">*</span></label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => handleChange('email', e.target.value)}
-                placeholder="请输入邮箱"
-                className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
-              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -155,6 +151,8 @@ export default function Signup() {
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    required
                     value={form.password}
                     onChange={(e) => handleChange('password', e.target.value)}
                     placeholder="至少6个字符"
@@ -173,6 +171,8 @@ export default function Signup() {
                 <label className="block text-sm font-medium text-foreground mb-1">确认密码 <span className="text-red-500">*</span></label>
                 <input
                   type="password"
+                  autoComplete="new-password"
+                  required
                   value={form.confirmPassword}
                   onChange={(e) => handleChange('confirmPassword', e.target.value)}
                   placeholder="再次输入密码"

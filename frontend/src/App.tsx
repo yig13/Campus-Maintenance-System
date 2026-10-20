@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Index from './pages/Index';
 import Login from './components/custom/Login';
 import Signup from './components/custom/Signup';
-import LandingPage from './pages/LandingPage';
 
 import { LanguageProvider } from './contexts/LanguageContext';
 
@@ -21,10 +20,10 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* 落地页 - 默认路由（未登录用户可见） */}
+      {/* 默认直接进入登录页 */}
       <Route
         path="/"
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />}
+        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
       />
       {/* 登录页 */}
       <Route

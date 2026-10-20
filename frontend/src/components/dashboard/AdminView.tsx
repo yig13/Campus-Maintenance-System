@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { translations } from '../../lib/i18n';
 import { RepairRequest, User, Stats, ApiResponse, PaginatedApiResponse } from '../../types';
 import { toast } from 'sonner';
@@ -14,7 +15,11 @@ import AdminPartsTab from './AdminPartsTab';
 import { Badge } from '../shared/StatusBadge';
 import { SlaBadge } from '../shared/StatusBadge';
 import ConsumedPartsList from '../shared/ConsumedPartsList';
-import { tCat, tStatus, tPriority, CATEGORY_LABEL, CATEGORY_DISPLAY_GROUP, TECHNICIAN_SKILL_OPTIONS, PRIORITY_COLOR, STATUS_COLOR } from '../shared/constants';
+import RepairDetailModal from '../shared/RepairDetailModal';
+import { tCat, tStatus, tPriority, CATEGORY_LABEL, CATEGORY_DISPLAY_GROUP, REPAIRMAN_SKILL_OPTIONS, PRIORITY_COLOR, STATUS_COLOR } from '../shared/constants';
+
+const getVisibleRepairmanSkills = (skills?: string) =>
+  (skills || '').split(',').filter((skill) => REPAIRMAN_SKILL_OPTIONS.some((option) => option === skill));
 import {
   ResponsiveContainer,
   PieChart, Pie, Cell, Tooltip, Legend,
@@ -24,14 +29,16 @@ import {
 
 export default function AdminView({ token }: { token: string | null }) {
   const { language, t } = useLanguage();
+  const { user: currentUser } = useAuth();
   const [tab, setTab] = useState<'repairs' | 'stats' | 'parts' | 'users'>('repairs');
   const [repairs, setRepairs] = useState<RepairRequest[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [technicians, setTechnicians] = useState<User[]>([]);
+  const [repairmen, setRepairmen] = useState<User[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<RepairRequest | null>(null);
-  const [assignForm, setAssignForm] = useState({ status: 'approved', assignedTo: '', adminNote: '', priority: 'normal' });
+  const [detailTarget, setDetailTarget] = useState<RepairRequest | null>(null);
+  const [assignForm, setAssignForm] = useState({ status: 'waiting', assignedTo: '', adminNote: '', priority: 'normal' });
   const [assigning, setAssigning] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
 
@@ -42,13 +49,13 @@ export default function AdminView({ token }: { token: string | null }) {
 
   // Create Admin Modal State
   const [createAdminOpen, setCreateAdminOpen] = useState(false);
-  const [createAdminForm, setCreateAdminForm] = useState({ name: '', email: '', password: '', phone: '' });
+  const [createAdminForm, setCreateAdminForm] = useState({ name: '', userId: '', password: '', phone: '' });
   const [creatingAdmin, setCreatingAdmin] = useState(false);
 
-  // Create Technician Modal State
-  const [createTechOpen, setCreateTechOpen] = useState(false);
-  const [createTechForm, setCreateTechForm] = useState({ name: '', email: '', password: '', phone: '', skills: '' });
-  const [creatingTech, setCreatingTech] = useState(false);
+  // Create Repairman Modal State
+  const [createRepairmanOpen, setCreateRepairmanOpen] = useState(false);
+  const [createRepairmanForm, setCreateRepairmanForm] = useState({ name: '', userId: '', password: '', phone: '', skills: '' });
+  const [creatingRepairman, setCreatingRepairman] = useState(false);
 
   // Repairs Pagination State
   const [repairsPage, setRepairsPage] = useState(1);
@@ -58,6 +65,7 @@ export default function AdminView({ token }: { token: string | null }) {
   // Users Pagination State
   const [usersPage, setUsersPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
+  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'admin' | 'repairman' | 'user'>('all');
   const usersPageSize = 8;
 
   const loadRepairs = useCallback(async () => {
@@ -76,20 +84,20 @@ export default function AdminView({ token }: { token: string | null }) {
 
   const loadUsers = useCallback(async () => {
     try {
-      const url = `${API.USERS.LIST}?page=${usersPage}&pageSize=${usersPageSize}`;
+      const url = `${API.USERS.LIST}?page=${usersPage}&pageSize=${usersPageSize}&role=${userRoleFilter}`;
       const [uRes, tRes] = await Promise.all([
         authFetch(url, token),
-        authFetch(API.USERS.TECHNICIANS, token),
+        authFetch(API.USERS.REPAIRMEN, token),
       ]);
       const uData = await uRes.json() as PaginatedApiResponse<User[]>;
-      const tData = await tRes.json() as ApiResponse<User[]>;
+      const repairmanData = await tRes.json() as ApiResponse<User[]>;
       if (uData.success) {
         setUsers(uData.data);
         setTotalUsers(uData.total ?? uData.data.length);
       }
-      if (tData.success) setTechnicians(tData.data);
+      if (repairmanData.success) setRepairmen(repairmanData.data);
     } catch { toast.error('加载用户失败'); }
-  }, [token, usersPage, usersPageSize]);
+  }, [token, usersPage, usersPageSize, userRoleFilter]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -115,16 +123,16 @@ export default function AdminView({ token }: { token: string | null }) {
         method: 'PATCH',
         body: JSON.stringify({
           status: assignForm.status,
-          assignedTo: assignForm.assignedTo || undefined,
-          adminNote: assignForm.adminNote || undefined,
-          priority: assignForm.priority || undefined,
+          assignedTo: assignForm.assignedTo,
+          adminNote: assignForm.adminNote,
+          priority: assignForm.priority,
         }),
       });
       const data = await res.json() as ApiResponse<RepairRequest>;
       if (data.success) {
         toast.success('操作成功');
         setSelected(null);
-        setAssignForm({ status: 'approved', assignedTo: '', adminNote: '', priority: 'normal' });
+        setAssignForm({ status: 'waiting', assignedTo: '', adminNote: '', priority: 'normal' });
         loadRepairs();
         loadStats();
       } else {
@@ -170,7 +178,7 @@ export default function AdminView({ token }: { token: string | null }) {
   }
 
   async function createAdmin() {
-    if (!createAdminForm.name || !createAdminForm.email || !createAdminForm.password) {
+    if (!createAdminForm.name.trim() || !createAdminForm.userId.trim() || !createAdminForm.password || !createAdminForm.phone.trim()) {
       toast.error('请填写完整信息');
       return;
     }
@@ -184,7 +192,7 @@ export default function AdminView({ token }: { token: string | null }) {
       if (data.success) {
         toast.success('管理员创建成功');
         setCreateAdminOpen(false);
-        setCreateAdminForm({ name: '', email: '', password: '', phone: '' });
+        setCreateAdminForm({ name: '', userId: '', password: '', phone: '' });
         loadUsers();
       } else {
         toast.error(data.message || await readApiMessage(res, '创建失败'));
@@ -196,22 +204,22 @@ export default function AdminView({ token }: { token: string | null }) {
     }
   }
 
-  async function createTechnician() {
-    if (!createTechForm.name || !createTechForm.email || !createTechForm.password) {
+  async function createRepairman() {
+    if (!createRepairmanForm.name.trim() || !createRepairmanForm.userId.trim() || !createRepairmanForm.phone.trim() || !createRepairmanForm.password) {
       toast.error('请填写完整信息');
       return;
     }
-    setCreatingTech(true);
+    setCreatingRepairman(true);
     try {
-      const res = await authFetch(API.USERS.CREATE_TECHNICIAN, token, {
+      const res = await authFetch(API.USERS.CREATE_REPAIRMAN, token, {
         method: 'POST',
-        body: JSON.stringify(createTechForm),
+        body: JSON.stringify(createRepairmanForm),
       });
       const data = await res.json() as ApiResponse<any>;
       if (data.success) {
         toast.success('维修员创建成功');
-        setCreateTechOpen(false);
-        setCreateTechForm({ name: '', email: '', password: '', phone: '', skills: '' });
+        setCreateRepairmanOpen(false);
+        setCreateRepairmanForm({ name: '', userId: '', password: '', phone: '', skills: '' });
         loadUsers();
       } else {
         toast.error(data.message || await readApiMessage(res, '创建失败'));
@@ -219,28 +227,7 @@ export default function AdminView({ token }: { token: string | null }) {
     } catch {
       toast.error('网络错误');
     } finally {
-      setCreatingTech(false);
-    }
-  }
-
-  async function exportCSV() {
-    try {
-      const res = await authFetch(API.REPAIRS.EXPORT, token);
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `repairs_export_${new Date().getTime()}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      } else {
-        toast.error('导出失败，请检查权限');
-      }
-    } catch (e) {
-      toast.error('网络错误，导出失败');
+      setCreatingRepairman(false);
     }
   }
 
@@ -259,7 +246,7 @@ export default function AdminView({ token }: { token: string | null }) {
     }));
 
   const barData = stats ? [
-    { name: t('status_pending'), count: stats.pendingRequests, color: '#f59e0b' },
+    { name: t('status_waiting'), count: stats.pendingRequests, color: '#f59e0b' },
     { name: t('status_in_progress'), count: stats.inProgressRequests, color: '#8b5cf6' },
     { name: t('status_completed'), count: stats.completedRequests, color: '#10b981' },
     { name: t('status_rejected'), count: stats.rejectedRequests || 0, color: '#ef4444' }
@@ -293,9 +280,6 @@ export default function AdminView({ token }: { token: string | null }) {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-foreground">{t('repairList')}</h3>
             <div className="flex gap-2">
-              <button onClick={exportCSV} className="px-3 py-1.5 rounded-xl border border-border hover:bg-muted transition text-sm font-medium flex items-center gap-1.5">
-                {t('exportCSV')}
-              </button>
               <button onClick={loadRepairs} className="p-2 rounded-xl border border-border hover:bg-muted transition hover:scale-105 active:scale-95 duration-200" title={language === 'zh' ? '刷新列表' : 'Refresh List'}>
                 <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
               </button>
@@ -303,7 +287,7 @@ export default function AdminView({ token }: { token: string | null }) {
           </div>
           {/* Filter */}
           <div className="flex gap-2 flex-wrap mb-4">
-            {['all', 'pending', 'approved', 'in_progress', 'completed', 'pending_evaluation', 'closed', 'rejected'].map((s) => (
+            {['all', 'waiting', 'ready', 'in_progress', 'pending_evaluation', 'closed', 'rejected'].map((s) => (
               <button key={s} onClick={() => { setFilterStatus(s); setRepairsPage(1); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                   filterStatus === s ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -327,7 +311,7 @@ export default function AdminView({ token }: { token: string | null }) {
               {filteredRepairs.map((r) => (
                 <div key={r.id} className="bg-white rounded-2xl shadow-sm border border-border p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetailTarget(r)}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground">{r.dormBuilding}{r.dormRoom ? ` ${r.dormRoom}` : ''}</span>
                         <Badge label={tCat(r.category, t)} colorClass="bg-gray-100 text-gray-700" />
@@ -337,8 +321,8 @@ export default function AdminView({ token }: { token: string | null }) {
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{r.description}</p>
-                      {r.studentName && <p className="text-xs text-muted-foreground mt-1">{language === 'zh' ? `学生：${r.studentName}` : `Student: ${r.studentName}`}</p>}
-                      {r.assignedToName && <p className="text-xs text-muted-foreground">{language === 'zh' ? `维修员：${r.assignedToName}` : `Technician: ${r.assignedToName}`}</p>}
+                      {r.userName && <p className="text-xs text-muted-foreground mt-1">{language === 'zh' ? `报修用户：${r.userName}` : `User: ${r.userName}`}</p>}
+                      {r.assignedToName && <p className="text-xs text-muted-foreground">{language === 'zh' ? `维修员：${r.assignedToName}` : `Repairman: ${r.assignedToName}`}</p>}
 
                       <p className="text-xs text-muted-foreground mt-1">{new Date(r.createdAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</p>
                       {/* 评价信息显示 */}
@@ -371,25 +355,25 @@ export default function AdminView({ token }: { token: string | null }) {
                           <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '更新状态' : 'Update Status'}</label>
                           <select value={assignForm.status} onChange={(e) => setAssignForm(p => ({ ...p, status: e.target.value }))}
                             className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
-                            <option value="pending">{t('status_pending')}</option>
-                            <option value="approved">{t('status_approved')}</option>
+                            <option value="waiting">{t('status_waiting')}</option>
+                            <option value="ready">{t('status_ready')}</option>
                             <option value="in_progress">{t('status_in_progress')}</option>
-                            <option value="completed">{t('status_completed')}</option>
+                            <option value="pending_evaluation">{t('status_pending_evaluation')}</option>
                             <option value="closed">{t('status_closed')}</option>
                             <option value="rejected">{t('status_rejected')}</option>
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '分配维修员' : 'Assign Technician'}</label>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '分配维修员' : 'Assign Repairman'}</label>
                           <select value={assignForm.assignedTo} onChange={(e) => setAssignForm(p => ({ ...p, assignedTo: e.target.value }))}
                             className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
                             <option value="">{language === 'zh' ? '不分配' : 'Unassigned'}</option>
-                            {technicians.map((tech) => {
-                              const count = tech.activeTasksCount || 0;
+                            {repairmen.map((repairman) => {
+                              const count = repairman.activeTasksCount || 0;
                               const label = count === 0 ? (language === 'zh' ? '空闲' : 'Idle') : (language === 'zh' ? `${count}单在办` : `${count} active`);
                               return (
-                                <option key={tech.id} value={tech.id}>
-                                  {tech.name} ({label})
+                                <option key={repairman.id} value={repairman.id}>
+                                  {repairman.name} ({label})
                                 </option>
                               );
                             })}
@@ -448,7 +432,7 @@ export default function AdminView({ token }: { token: string | null }) {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
             {[
               { label: '总报修数', value: stats.totalRequests, color: 'bg-blue-50 text-blue-700', icon: ClipboardList },
-              { label: '待处理', value: stats.pendingRequests, color: 'bg-yellow-50 text-yellow-700', icon: Clock },
+              { label: '待接单', value: stats.pendingRequests, color: 'bg-yellow-50 text-yellow-700', icon: Clock },
               { label: '维修中', value: stats.inProgressRequests, color: 'bg-purple-50 text-purple-700', icon: Wrench },
               { label: '已完成', value: stats.completedRequests, color: 'bg-green-50 text-green-700', icon: CheckCircle },
               { label: '物料开销', value: stats.totalCost !== undefined ? `￥${stats.totalCost.toFixed(2)}` : '￥0.00', color: 'bg-red-50 text-red-700', icon: Wrench },
@@ -592,8 +576,8 @@ export default function AdminView({ token }: { token: string | null }) {
               <div className="grid grid-cols-3 gap-2">
                 {[
                   { label: '总用户数', value: stats.totalUsers, color: 'text-primary' },
-                  { label: '注册学生', value: stats.studentCount, color: 'text-foreground' },
-                  { label: '维修师傅', value: stats.technicianCount, color: 'text-foreground' },
+                  { label: '注册用户', value: stats.userCount, color: 'text-foreground' },
+                  { label: '维修员', value: stats.repairmanCount, color: 'text-foreground' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="bg-muted/30 rounded-xl p-3 text-center">
                     <p className={`text-xl font-bold ${color}`}>{value}</p>
@@ -657,11 +641,11 @@ export default function AdminView({ token }: { token: string | null }) {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-foreground">用户列表 ({totalUsers})</h3>
             <div className="flex gap-2">
-              <button onClick={() => setCreateTechOpen(true)}
+              <button onClick={() => { setCreateRepairmanForm({ name: '', userId: '', password: '', phone: '', skills: '' }); setCreateRepairmanOpen(true); }}
                 className="px-3 py-1.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:opacity-90 transition flex items-center gap-1.5">
-                <Wrench className="w-4 h-4" />{language === 'zh' ? '创建维修员' : 'Add Tech'}
+                <Wrench className="w-4 h-4" />{language === 'zh' ? '创建维修员' : 'Add Repairman'}
               </button>
-              <button onClick={() => setCreateAdminOpen(true)}
+              <button onClick={() => { setCreateAdminForm({ name: '', userId: '', password: '', phone: '' }); setCreateAdminOpen(true); }}
                 className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition flex items-center gap-1.5">
                 <Shield className="w-4 h-4" />{language === 'zh' ? '创建管理员' : 'Add Admin'}
               </button>
@@ -669,6 +653,21 @@ export default function AdminView({ token }: { token: string | null }) {
                 <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
               </button>
             </div>
+          </div>
+          <div className="flex gap-2 flex-wrap mb-4">
+            {([
+              ['all', language === 'zh' ? '全部' : 'All'],
+              ['admin', language === 'zh' ? '管理员' : 'Admins'],
+              ['repairman', language === 'zh' ? '维修员' : 'Repairmen'],
+              ['user', language === 'zh' ? '用户' : 'Users'],
+            ] as const).map(([role, label]) => (
+              <button key={role} onClick={() => { setUserRoleFilter(role); setUsersPage(1); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  userRoleFilter === role ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}>
+                {label}
+              </button>
+            ))}
           </div>
           <div className="space-y-3">
             {users.map((u) => (
@@ -680,12 +679,13 @@ export default function AdminView({ token }: { token: string | null }) {
                     </div>
                     <div>
                       <p className="font-medium text-foreground">{u.name}</p>
-                      <p className="text-xs text-muted-foreground">{u.email}</p>
-                      {u.studentId && <p className="text-xs text-muted-foreground">学号：{u.studentId}</p>}
+                      {u.userId && <p className="text-xs text-muted-foreground">学号/工号：{u.userId}</p>}
+                      {u.role === 'repairman' && u.phone && <p className="text-xs text-muted-foreground">电话：{u.phone}</p>}
+                      {u.dormBuilding && <p className="text-xs text-muted-foreground">楼栋：{u.dormBuilding}</p>}
                       {u.dormRoom && <p className="text-xs text-muted-foreground">宿舍：{u.dormRoom}</p>}
-                      {u.role === 'technician' && (
+                      {u.role === 'repairman' && (
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          {u.skills ? u.skills.split(',').map(s => (
+                          {getVisibleRepairmanSkills(u.skills).length ? getVisibleRepairmanSkills(u.skills).map(s => (
                             <span key={s} className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
                               {CATEGORY_LABEL[s] || s}
                             </span>
@@ -698,16 +698,18 @@ export default function AdminView({ token }: { token: string | null }) {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <Badge
-                      label={u.role === 'student' ? '学生' : u.role === 'technician' ? '维修员' : '管理员'}
-                      colorClass={u.role === 'admin' ? 'bg-purple-100 text-purple-700' : u.role === 'technician' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}
+                      label={u.role === 'user' ? '用户' : u.role === 'repairman' ? '维修员' : '管理员'}
+                      colorClass={u.role === 'admin' ? 'bg-purple-100 text-purple-700' : u.role === 'repairman' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}
                     />
                     <div className="flex items-center gap-2 mt-1">
-                      {u.role === 'technician' && (
-                        <button onClick={() => { setSkillsTarget(u); setSkillsForm(u.skills ? u.skills.split(',') : []); setSkillsModalOpen(true); }}
+                      {u.role === 'repairman' && (
+                        <button onClick={() => { setSkillsTarget(u); setSkillsForm(getVisibleRepairmanSkills(u.skills)); setSkillsModalOpen(true); }}
                           className="text-xs text-primary hover:underline">编辑技能</button>
                       )}
-                      <button onClick={() => deleteUser(u.id)}
-                        className="text-xs text-red-500 hover:text-red-700 hover:underline">删除</button>
+                      {u.id !== currentUser?.id && (
+                        <button onClick={() => deleteUser(u.id)}
+                          className="text-xs text-red-500 hover:text-red-700 hover:underline">删除</button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -734,7 +736,7 @@ export default function AdminView({ token }: { token: string | null }) {
               </button>
             </div>
             <div className="p-4 space-y-3">
-              {TECHNICIAN_SKILL_OPTIONS.map(cat => (
+              {REPAIRMAN_SKILL_OPTIONS.map(cat => (
                 <label key={cat} className="flex items-center gap-3 p-3 rounded-xl border border-border cursor-pointer hover:bg-muted/50 transition">
                   <input type="checkbox" className="w-4 h-4 rounded text-primary focus:ring-primary/50"
                     checked={skillsForm.includes(cat)}
@@ -769,26 +771,26 @@ export default function AdminView({ token }: { token: string | null }) {
             </div>
             <div className="p-4 space-y-3">
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '姓名' : 'Name'}</label>
-                <input value={createAdminForm.name} onChange={(e) => setCreateAdminForm(p => ({ ...p, name: e.target.value }))}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '姓名 *' : 'Name *'}</label>
+                <input required value={createAdminForm.name} onChange={(e) => setCreateAdminForm(p => ({ ...p, name: e.target.value }))}
                   placeholder={language === 'zh' ? '请输入姓名' : 'Enter name'}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '邮箱' : 'Email'}</label>
-                <input type="email" value={createAdminForm.email} onChange={(e) => setCreateAdminForm(p => ({ ...p, email: e.target.value }))}
-                  placeholder={language === 'zh' ? '请输入邮箱' : 'Enter email'}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '管理员账号 *' : 'Admin ID *'}</label>
+                <input required autoComplete="off" value={createAdminForm.userId} onChange={(e) => setCreateAdminForm(p => ({ ...p, userId: e.target.value }))}
+                  placeholder={language === 'zh' ? '请输入管理员账号' : 'Enter admin ID'}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '密码' : 'Password'}</label>
-                <input type="password" value={createAdminForm.password} onChange={(e) => setCreateAdminForm(p => ({ ...p, password: e.target.value }))}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '密码 *' : 'Password *'}</label>
+                <input required minLength={6} type="password" autoComplete="new-password" value={createAdminForm.password} onChange={(e) => setCreateAdminForm(p => ({ ...p, password: e.target.value }))}
                   placeholder={language === 'zh' ? '至少6位' : 'Min 6 characters'}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '手机号' : 'Phone'}</label>
-                <input type="tel" value={createAdminForm.phone} onChange={(e) => setCreateAdminForm(p => ({ ...p, phone: e.target.value }))}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '手机号 *' : 'Phone *'}</label>
+                <input required type="tel" value={createAdminForm.phone} onChange={(e) => setCreateAdminForm(p => ({ ...p, phone: e.target.value }))}
                   placeholder={language === 'zh' ? '请输入手机号' : 'Enter phone number'}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
@@ -806,52 +808,52 @@ export default function AdminView({ token }: { token: string | null }) {
         </div>
       )}
 
-      {/* Create Technician Modal */}
-      {createTechOpen && (
+      {/* Create Repairman Modal */}
+      {createRepairmanOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95">
             <div className="p-4 border-b border-border flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">{language === 'zh' ? '创建维修员账号' : 'Create Technician Account'}</h3>
-              <button onClick={() => setCreateTechOpen(false)} className="text-muted-foreground hover:text-foreground">
+              <h3 className="font-semibold text-foreground">{language === 'zh' ? '创建维修员账号' : 'Create Repairman Account'}</h3>
+              <button onClick={() => setCreateRepairmanOpen(false)} className="text-muted-foreground hover:text-foreground">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="p-4 space-y-3">
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '姓名' : 'Name'}</label>
-                <input value={createTechForm.name} onChange={(e) => setCreateTechForm(p => ({ ...p, name: e.target.value }))}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '姓名' : 'Name'} *</label>
+                <input required value={createRepairmanForm.name} onChange={(e) => setCreateRepairmanForm(p => ({ ...p, name: e.target.value }))}
                   placeholder={language === 'zh' ? '请输入姓名' : 'Enter name'}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '邮箱' : 'Email'}</label>
-                <input type="email" value={createTechForm.email} onChange={(e) => setCreateTechForm(p => ({ ...p, email: e.target.value }))}
-                  placeholder={language === 'zh' ? '请输入邮箱' : 'Enter email'}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '学号/工号' : 'Student/Staff ID'} *</label>
+                <input required autoComplete="off" value={createRepairmanForm.userId} onChange={(e) => setCreateRepairmanForm(p => ({ ...p, userId: e.target.value }))}
+                  placeholder={language === 'zh' ? '请输入学号/工号' : 'Enter ID'}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '密码' : 'Password'}</label>
-                <input type="password" value={createTechForm.password} onChange={(e) => setCreateTechForm(p => ({ ...p, password: e.target.value }))}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '密码' : 'Password'} *</label>
+                <input required minLength={6} type="password" autoComplete="new-password" value={createRepairmanForm.password} onChange={(e) => setCreateRepairmanForm(p => ({ ...p, password: e.target.value }))}
                   placeholder={language === 'zh' ? '至少6位' : 'Min 6 characters'}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '手机号' : 'Phone'}</label>
-                <input type="tel" value={createTechForm.phone} onChange={(e) => setCreateTechForm(p => ({ ...p, phone: e.target.value }))}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '手机号' : 'Phone'} *</label>
+                <input required type="tel" value={createRepairmanForm.phone} onChange={(e) => setCreateRepairmanForm(p => ({ ...p, phone: e.target.value }))}
                   placeholder={language === 'zh' ? '请输入手机号' : 'Enter phone number'}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">{language === 'zh' ? '技能' : 'Skills'}</label>
                 <div className="flex flex-wrap gap-2">
-                  {TECHNICIAN_SKILL_OPTIONS.map(cat => (
+                  {REPAIRMAN_SKILL_OPTIONS.map(cat => (
                     <label key={cat} className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border cursor-pointer hover:bg-muted/50 transition text-xs">
                       <input type="checkbox" className="w-3 h-3 rounded text-primary focus:ring-primary/50"
-                        checked={createTechForm.skills.split(',').filter(Boolean).includes(cat)}
+                        checked={createRepairmanForm.skills.split(',').filter(Boolean).includes(cat)}
                         onChange={(e) => {
-                          const current = createTechForm.skills.split(',').filter(Boolean);
+                          const current = createRepairmanForm.skills.split(',').filter(Boolean);
                           const updated = e.target.checked ? [...current, cat] : current.filter(s => s !== cat);
-                          setCreateTechForm(p => ({ ...p, skills: updated.join(',') }));
+                          setCreateRepairmanForm(p => ({ ...p, skills: updated.join(',') }));
                         }}
                       />
                       <span>{CATEGORY_LABEL[cat] || cat}</span>
@@ -861,18 +863,19 @@ export default function AdminView({ token }: { token: string | null }) {
               </div>
             </div>
             <div className="p-4 border-t border-border flex gap-3">
-              <button onClick={() => setCreateTechOpen(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition">
+              <button onClick={() => setCreateRepairmanOpen(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition">
                 {t('cancel')}
               </button>
-              <button onClick={createTechnician} disabled={creatingTech}
+              <button onClick={createRepairman} disabled={creatingRepairman}
                 className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:opacity-90 transition disabled:opacity-50">
-                {creatingTech ? (language === 'zh' ? '创建中...' : 'Creating...') : (language === 'zh' ? '创建' : 'Create')}
+                {creatingRepairman ? (language === 'zh' ? '创建中...' : 'Creating...') : (language === 'zh' ? '创建' : 'Create')}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      <RepairDetailModal repair={detailTarget} token={token} onClose={() => setDetailTarget(null)} />
     </div>
   );
 }

@@ -1,10 +1,10 @@
 export interface User {
   id: string;
   name: string;
-  email: string;
-  role: 'student' | 'technician' | 'admin';
-  studentId?: string;
+  role: 'user' | 'repairman' | 'admin';
+  userId?: string;
   dormRoom?: string;
+  dormBuilding?: string;
   phone?: string;
   skills?: string;
   createdAt?: string;
@@ -13,35 +13,32 @@ export interface User {
 
 export interface RepairRequest {
   id: string;
-  studentId?: string;
   dormBuilding: string;
   dormRoom: string;
   category: string;
   description: string;
   imageUrl?: string;
-  status: 'pending' | 'approved' | 'in_progress' | 'completed' | 'pending_evaluation' | 'closed' | 'rejected';
+  status: 'waiting' | 'ready' | 'in_progress' | 'pending_evaluation' | 'closed' | 'rejected';
   priority: 'low' | 'normal' | 'high' | 'urgent';
   assignedTo?: string;
   adminNote?: string;
   workNote?: string;
   createdAt: string;
   updatedAt: string;
-  studentName?: string;
-  studentPhone?: string;
+  userName?: string;
+  userPhone?: string;
   assignedToName?: string;
   rating?: number;
   feedbackTags?: string;
   feedbackText?: string;
   slaDueDate?: string;
   slaBreached?: number;
-  aiCategory?: 'water' | 'electricity' | 'furniture' | 'network' | 'other';
-  aiPriority?: 'low' | 'normal' | 'high' | 'urgent';
 }
 
 export interface RepairTask {
   id: string;
   requestId: string;
-  technicianId: string;
+  repairmanId: string;
   status: 'assigned' | 'in_progress' | 'completed';
   workNote?: string;
   startedAt?: string;
@@ -55,16 +52,7 @@ export interface RepairTask {
   description?: string;
   priority?: string;
   requestStatus?: string;
-  studentName?: string;
-}
-
-export interface Review {
-  id: string;
-  requestId: string;
-  studentId: string;
-  rating: number;
-  comment?: string;
-  createdAt: string;
+  userName?: string;
 }
 
 export interface Stats {
@@ -74,8 +62,8 @@ export interface Stats {
   completedRequests: number;
   rejectedRequests: number;
   totalUsers: number;
-  studentCount: number;
-  technicianCount: number;
+  userCount: number;
+  repairmanCount: number;
   categoryStats: { category: string; count: number }[];
   buildingStats?: { building: string; count: number }[];
   avgRating: string;
@@ -103,16 +91,6 @@ export interface RepairPart {
   price: number;
   partName?: string;
   createdAt: string;
-}
-
-export interface Comment {
-  id: string;
-  repairId: string;
-  userId: string;
-  content: string;
-  createdAt: string;
-  userName?: string;
-  userRole?: string;
 }
 
 export interface Notification {
@@ -145,22 +123,4 @@ export interface PaginatedApiResponse<T> extends ApiResponse<T> {
   total: number;
   page?: number;
   pageSize?: number;
-}
-
-export interface AIConfig {
-  id: string;
-  name: string;
-  provider: 'simulation' | 'openai' | 'deepseek' | 'ollama' | 'custom';
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-  systemPrompt?: string;
-  isActive: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
 }

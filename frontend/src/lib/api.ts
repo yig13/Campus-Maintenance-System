@@ -15,13 +15,7 @@ export const API = {
     CREATE: `${API_BASE_URL}/api/repairs`,
     UPDATE_STATUS: (id: string) => `${API_BASE_URL}/api/repairs/${id}/status`,
     EVALUATE: (id: string) => `${API_BASE_URL}/api/repairs/${id}/evaluate`,
-    ANALYZE: `${API_BASE_URL}/api/repairs/analyze`,
-    ANALYZE_IMAGE: `${API_BASE_URL}/api/repairs/analyze-image`,
     EXPORT: `${API_BASE_URL}/api/repairs/export`,
-    COMMENTS: (id: string) => `${API_BASE_URL}/api/repairs/${id}/comments`,
-  },
-  REVIEWS: {
-    CREATE: `${API_BASE_URL}/api/reviews`,
   },
   NOTIFICATIONS: {
     LIST: `${API_BASE_URL}/api/notifications`,
@@ -35,13 +29,13 @@ export const API = {
   },
   USERS: {
     LIST: `${API_BASE_URL}/api/users`,
-    TECHNICIANS: `${API_BASE_URL}/api/users/technicians`,
+    REPAIRMEN: `${API_BASE_URL}/api/users/repairmen`,
     UPDATE: (id: string) => `${API_BASE_URL}/api/users/${id}`,
     UPDATE_PROFILE: `${API_BASE_URL}/api/users/profile`,
     CHANGE_PASSWORD: `${API_BASE_URL}/api/users/change-password`,
     UPDATE_SKILLS: (id: string) => `${API_BASE_URL}/api/users/${id}/skills`,
     CREATE_ADMIN: `${API_BASE_URL}/api/users/create-admin`,
-    CREATE_TECHNICIAN: `${API_BASE_URL}/api/users/create-technician`,
+    CREATE_REPAIRMAN: `${API_BASE_URL}/api/users/create-repairman`,
   },
   STATS: {
     GET: `${API_BASE_URL}/api/stats`,
@@ -52,14 +46,6 @@ export const API = {
     UPDATE: (id: string) => `${API_BASE_URL}/api/parts/${id}`,
     DELETE: (id: string) => `${API_BASE_URL}/api/parts/${id}`,
     REPAIR_PARTS: (repairId: string) => `${API_BASE_URL}/api/repairs/${repairId}/parts`,
-  },
-  AI: {
-    CONFIG_LIST: `${API_BASE_URL}/api/admin/ai-configs`,
-    CONFIG_CREATE: `${API_BASE_URL}/api/admin/ai-configs`,
-    CONFIG_UPDATE: (id: string) => `${API_BASE_URL}/api/admin/ai-configs/${id}`,
-    CONFIG_DELETE: (id: string) => `${API_BASE_URL}/api/admin/ai-configs/${id}`,
-    CONFIG_TEST: `${API_BASE_URL}/api/admin/ai-configs/test`,
-    CHAT: `${API_BASE_URL}/api/chat`,
   },
 };
 

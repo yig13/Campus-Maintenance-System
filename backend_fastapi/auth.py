@@ -23,13 +23,13 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES", "1440"))
 
 
-def create_access_token(user_id: str, name: str, email: str, role: str) -> str:
+def create_access_token(user_id: str, name: str, role: str, username: Optional[str] = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRE_MINUTES)
     payload = {
-        "sub": email,
+        "sub": username or user_id,
         "userId": user_id,
         "name": name,
-        "email": email,
+        "username": username,
         "role": role,
         "exp": expire,
     }

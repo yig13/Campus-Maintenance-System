@@ -17,8 +17,8 @@ export function tPriority(priority: string, t: (key: keyof typeof translations.z
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 export const STATUS_LABEL: Record<string, string> = {
-  pending: '待处理', approved: '已审核', in_progress: '维修中',
-  completed: '已完成', pending_evaluation: '待评价', closed: '已结案', rejected: '已拒绝',
+  waiting: '待接单', ready: '已接单', in_progress: '维修中',
+  pending_evaluation: '待评价', closed: '已结案', rejected: '已拒绝',
 };
 export const DORM_BUILDING_GROUPS: { group: string; options: string[] }[] = [
   { group: '学生公寓', options: Array.from({ length: 10 }, (_, i) => `公寓${i + 1}栋`) },
@@ -33,10 +33,9 @@ export const DORM_BUILDING_GROUPS: { group: string; options: string[] }[] = [
 ];
 export const DORM_BUILDINGS = DORM_BUILDING_GROUPS.flatMap((g) => g.options);
 export const STATUS_COLOR: Record<string, string> = {
-  pending: 'bg-orange-100 text-orange-800',
-  approved: 'bg-blue-100 text-blue-800',
+  waiting: 'bg-orange-100 text-orange-800',
+  ready: 'bg-blue-100 text-blue-800',
   in_progress: 'bg-purple-100 text-purple-800',
-  completed: 'bg-green-100 text-green-800',
   pending_evaluation: 'bg-yellow-100 text-yellow-800 ring-2 ring-yellow-300',
   closed: 'bg-gray-100 text-gray-800',
   rejected: 'bg-red-100 text-red-800',
@@ -93,17 +92,10 @@ export const CATEGORY_TO_SKILL: Record<string, string> = {
   glass_window: 'furniture', curtain: 'furniture', screen_window: 'furniture', drying_rack: 'furniture',
   office: 'other',
 };
-export const TECHNICIAN_SKILL_OPTIONS = ['furniture', 'water', 'electricity', 'other', 'network'] as const;
-export const AI_CATEGORY_TO_LEAF: Record<string, string> = {
-  water: 'sink',
-  electricity: 'lamp',
-  furniture: 'wardrobe',
-  network: 'office',
-  other: 'office',
-};
+export const REPAIRMAN_SKILL_OPTIONS = ['furniture', 'water', 'electricity', 'other'] as const;
 export const CATEGORY_LABEL: Record<string, string> = {
   water: '热水类', electricity: '家电类', furniture: '综合类',
-  network: '网络类（历史技能）', other: '其他类',
+  other: '其他类',
 };
 export const PRIORITY_LABEL: Record<string, string> = {
   low: '低', normal: '普通', high: '高', urgent: '紧急',

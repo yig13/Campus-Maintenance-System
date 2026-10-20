@@ -7,7 +7,6 @@ import { Megaphone, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react
 export default function AnnouncementsBanner({ token, role }: { token: string | null; role: string }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -30,12 +29,12 @@ export default function AnnouncementsBanner({ token, role }: { token: string | n
   }, [loadAnnouncements]);
 
   useEffect(() => {
-    if (announcements.length <= 1 || isExpanded) return;
+    if (announcements.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % announcements.length);
     }, 10000);
     return () => clearInterval(interval);
-  }, [announcements.length, isExpanded]);
+  }, [announcements.length]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,27 +78,19 @@ export default function AnnouncementsBanner({ token, role }: { token: string | n
 
   return (
     <div className="mb-6">
-      <div className={`bg-orange-50 border border-orange-100 rounded-2xl p-4 flex justify-between gap-3 ${isExpanded ? 'items-start' : 'items-center'}`}>
+      <div className="min-h-24 bg-orange-50 border border-orange-100 rounded-2xl p-4 flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
             <Megaphone className="w-4 h-4 text-orange-600" />
           </div>
           {announcements.length > 0 ? (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-orange-900 truncate">
+              <p className="text-sm font-semibold text-orange-900 whitespace-pre-wrap break-words">
                 {announcements[currentIndex]?.title}
               </p>
-              <p className={`text-xs text-orange-700 mt-0.5 whitespace-pre-wrap break-words ${isExpanded ? '' : 'truncate'}`}>
+              <p className="text-xs text-orange-700 mt-0.5 whitespace-pre-wrap break-words">
                 {announcements[currentIndex]?.content}
               </p>
-              <button
-                type="button"
-                aria-expanded={isExpanded}
-                onClick={() => setIsExpanded((expanded) => !expanded)}
-                className="mt-1 text-xs text-orange-800 hover:text-orange-950 underline underline-offset-2"
-              >
-                {isExpanded ? '收起' : '展开全部内容'}
-              </button>
             </div>
           ) : (
             <p className="text-sm text-orange-700">暂无公告</p>

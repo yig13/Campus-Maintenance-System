@@ -8,9 +8,17 @@ from fastapi.responses import JSONResponse
 
 from database import get_db, UPLOAD_DIR
 from auth import verify_token, require_admin, pwd_context
-from models import UpdateProfileRequest, ChangePasswordRequest, UpdateSkillsRequest, CreateAdminRequest, CreateTechnicianRequest
+from models import UpdateProfileRequest, ChangePasswordRequest, UpdateSkillsRequest, CreateAdminRequest, CreateRepairmanRequest
+from repair_taxonomy import DORM_BUILDINGS, VALID_REPAIRMAN_SKILLS
 
 router = APIRouter()
+
+
+def _normalize_skills(skills: str) -> str:
+    return ",".join(dict.fromkeys(
+        skill.strip() for skill in skills.split(",")
+        if skill.strip() in VALID_REPAIRMAN_SKILLS
+    ))
 
 
 @router.patch("/api/users/{user_id}/skills")
@@ -21,7 +29,7 @@ async def update_user_skills(user_id: str, payload: UpdateSkillsRequest, current
         if not existing:
             raise HTTPException(status_code=404, detail="用户不存在")
 
-        conn.execute("UPDATE users SET skills = ? WHERE id = ?", (payload.skills, user_id))
+        conn.execute("UPDATE users SET skills = ? WHERE id = ?", (_normalize_skills(payload.skills), user_id))
         conn.commit()
     finally:
         conn.close()
@@ -32,21 +40,34 @@ async def update_user_skills(user_id: str, payload: UpdateSkillsRequest, current
 async def get_users(
     page: Optional[int] = None,
     pageSize: Optional[int] = None,
+    role: Optional[str] = None,
     current_user: dict = Depends(require_admin)
 ):
     conn = get_db()
     try:
-        total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        query = "SELECT id, name, email, role, studentId, dormRoom, phone, skills, createdAt FROM users ORDER BY createdAt DESC"
+        conditions = []
         params = []
+        if role and role != "all":
+            if role not in ("admin", "repairman", "user"):
+                raise HTTPException(status_code=400, detail="用户身份筛选无效")
+            conditions.append("role = ?")
+            params.append(role)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        total = conn.execute(f"SELECT COUNT(*) FROM users {where_clause}", params).fetchone()[0]
+        query = f"SELECT id, name, role, studentId as userId, dormBuilding, dormRoom, phone, skills, createdAt FROM users {where_clause} ORDER BY createdAt DESC"
         if page is not None and pageSize is not None:
             query += " LIMIT ? OFFSET ?"
-            params.extend([pageSize, (page - 1) * pageSize])
-        rows = conn.execute(query, params).fetchall()
+            query_params = [*params, pageSize, (page - 1) * pageSize]
+        else:
+            query_params = params
+        rows = conn.execute(query, query_params).fetchall()
     finally:
         conn.close()
 
     data = [dict(r) for r in rows]
+    for user in data:
+        if user.get("role") == "repairman":
+            user["skills"] = _normalize_skills(user.get("skills") or "")
     if page is not None and pageSize is not None:
         return {
             "success": True,
@@ -59,16 +80,16 @@ async def get_users(
         return {"success": True, "data": data, "total": total}
 
 
-@router.get("/api/users/technicians")
-async def get_technicians(current_user: dict = Depends(verify_token)):
+@router.get("/api/users/repairmen")
+async def get_repairmen(current_user: dict = Depends(verify_token)):
     conn = get_db()
     try:
         rows = conn.execute("""
-            SELECT u.id, u.name, u.email, u.role,
+            SELECT u.id, u.name, u.studentId as userId, u.dormBuilding, u.role,
                    (SELECT COUNT(*) FROM repairs r
-                    WHERE r.assignedTo = u.id AND r.status IN ('approved', 'in_progress')) as activeTasksCount
+                    WHERE r.assignedTo = u.id AND r.status IN ('waiting', 'ready', 'in_progress')) as activeTasksCount
             FROM users u
-            WHERE u.role = 'technician'
+            WHERE u.role = 'repairman'
         """).fetchall()
     finally:
         conn.close()
@@ -77,6 +98,8 @@ async def get_technicians(current_user: dict = Depends(verify_token)):
 
 @router.delete("/api/users/{user_id}")
 async def delete_user(user_id: str, current_user: dict = Depends(require_admin)):
+    if user_id == current_user.get("userId"):
+        raise HTTPException(status_code=400, detail="不能删除当前登录的管理员账号")
     conn = get_db()
     try:
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -92,14 +115,15 @@ async def get_current_user(current_user: dict = Depends(verify_token)):
     conn = get_db()
     try:
         user = conn.execute(
-            "SELECT id, name, email, role, studentId, dormRoom, phone, createdAt FROM users WHERE id = ?",
+            "SELECT id, name, role, studentId as userId, dormBuilding, dormRoom, phone, createdAt FROM users WHERE id = ?",
             (user_id,)
         ).fetchone()
     finally:
         conn.close()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return {"success": True, "data": dict(user)}
+    user_data = dict(user)
+    return {"success": True, "data": user_data}
 
 
 @router.post("/api/upload")
@@ -149,13 +173,23 @@ async def update_profile(payload: UpdateProfileRequest, current_user: dict = Dep
             updates.append("phone = ?")
             values.append(payload.phone)
 
-        if user["role"] == "student":
-            if payload.studentId is not None:
+        if user["role"] == "user":
+            if payload.userId is not None:
                 updates.append("studentId = ?")
-                values.append(payload.studentId)
+                values.append(payload.userId)
+            if payload.dormBuilding is not None:
+                if payload.dormBuilding not in DORM_BUILDINGS:
+                    raise HTTPException(status_code=400, detail="楼栋选择无效")
+                updates.append("dormBuilding = ?")
+                values.append(payload.dormBuilding)
             if payload.dormRoom is not None:
                 updates.append("dormRoom = ?")
                 values.append(payload.dormRoom)
+        elif user["role"] == "repairman" and payload.dormBuilding is not None:
+            if payload.dormBuilding not in DORM_BUILDINGS:
+                raise HTTPException(status_code=400, detail="楼栋选择无效")
+            updates.append("dormBuilding = ?")
+            values.append(payload.dormBuilding)
 
         if not updates:
             raise HTTPException(status_code=400, detail="未提供任何修改字段")
@@ -165,14 +199,15 @@ async def update_profile(payload: UpdateProfileRequest, current_user: dict = Dep
         conn.commit()
 
         updated_user = conn.execute(
-            "SELECT id, name, email, role, studentId, dormRoom, phone, createdAt FROM users WHERE id = ?",
+            "SELECT id, name, role, studentId as userId, dormBuilding, dormRoom, phone, createdAt FROM users WHERE id = ?",
             (user_id,)
         ).fetchone()
     finally:
         conn.close()
 
     print(f"[/api/users/profile] User profile updated: {user_id}")
-    return {"success": True, "data": dict(updated_user)}
+    updated_data = dict(updated_user)
+    return {"success": True, "data": updated_data}
 
 
 @router.post("/api/users/change-password")
@@ -206,59 +241,66 @@ async def change_password(payload: ChangePasswordRequest, current_user: dict = D
 
 @router.post("/api/users/create-admin")
 async def create_admin(payload: CreateAdminRequest, current_user: dict = Depends(require_admin)):
-    if "@" not in payload.email:
-        raise HTTPException(status_code=400, detail="邮箱格式不正确")
+    name = payload.name.strip()
+    user_id_value = payload.userId.strip()
+    phone = payload.phone.strip()
+    if not name or not user_id_value or not phone:
+        raise HTTPException(status_code=400, detail="姓名、管理员账号、密码和手机号均为必填项")
     if len(payload.password) < 6:
         raise HTTPException(status_code=400, detail="密码长度不能少于6位")
-
     conn = get_db()
     try:
-        existing = conn.execute("SELECT id FROM users WHERE email = ?", (payload.email,)).fetchone()
+        existing = conn.execute("SELECT id FROM users WHERE studentId = ?", (user_id_value,)).fetchone()
         if existing:
-            raise HTTPException(status_code=400, detail="该邮箱已被注册")
-
+            raise HTTPException(status_code=400, detail="该用户已被注册")
         user_id = str(uuid.uuid4())
         now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
         hashed_password = pwd_context.hash(payload.password)
         conn.execute(
-            "INSERT INTO users (id, name, email, password, role, phone, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, payload.name, payload.email, hashed_password, "admin", payload.phone, now),
+            "INSERT INTO users (id, name, password, role, studentId, phone, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, name, hashed_password, "admin", user_id_value, phone, now),
         )
         conn.commit()
     finally:
         conn.close()
-    print(f"[/api/users/create-admin] Admin created: {payload.name} ({payload.email})")
+    print(f"[/api/users/create-admin] Admin created: {name} ({user_id_value})")
     return JSONResponse(
         status_code=201,
-        content={"success": True, "message": "管理员创建成功", "data": {"id": user_id, "name": payload.name, "email": payload.email, "role": "admin"}},
+        content={"success": True, "message": "管理员创建成功", "data": {"id": user_id, "name": name, "userId": user_id_value, "role": "admin"}},
     )
 
 
-@router.post("/api/users/create-technician")
-async def create_technician(payload: CreateTechnicianRequest, current_user: dict = Depends(require_admin)):
-    if "@" not in payload.email:
-        raise HTTPException(status_code=400, detail="邮箱格式不正确")
+@router.post("/api/users/create-repairman")
+async def create_repairman(payload: CreateRepairmanRequest, current_user: dict = Depends(require_admin)):
+    name = payload.name.strip()
+    student_id = payload.userId.strip()
+    phone = payload.phone.strip()
+    building = (payload.dormBuilding or "").strip()
+    if not name or not student_id or not phone:
+        raise HTTPException(status_code=400, detail="姓名、学号/工号和手机号均为必填项")
+    if building and building not in DORM_BUILDINGS:
+        raise HTTPException(status_code=400, detail="楼栋选择无效")
     if len(payload.password) < 6:
         raise HTTPException(status_code=400, detail="密码长度不能少于6位")
 
     conn = get_db()
     try:
-        existing = conn.execute("SELECT id FROM users WHERE email = ?", (payload.email,)).fetchone()
+        existing = conn.execute("SELECT id FROM users WHERE studentId = ?", (student_id,)).fetchone()
         if existing:
-            raise HTTPException(status_code=400, detail="该邮箱已被注册")
+            raise HTTPException(status_code=400, detail="该学号/工号已注册")
 
         user_id = str(uuid.uuid4())
         now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
         hashed_password = pwd_context.hash(payload.password)
         conn.execute(
-            "INSERT INTO users (id, name, email, password, role, skills, phone, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, payload.name, payload.email, hashed_password, "technician", payload.skills, payload.phone, now),
+            "INSERT INTO users (id, name, password, role, studentId, dormBuilding, skills, phone, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, name, hashed_password, "repairman", student_id, building or None, _normalize_skills(payload.skills), phone, now),
         )
         conn.commit()
     finally:
         conn.close()
-    print(f"[/api/users/create-technician] Technician created: {payload.name} ({payload.email})")
+    print(f"[/api/users/create-repairman] Repairman created: {name} ({student_id})")
     return JSONResponse(
         status_code=201,
-        content={"success": True, "message": "维修员创建成功", "data": {"id": user_id, "name": payload.name, "email": payload.email, "role": "technician", "skills": payload.skills}},
+        content={"success": True, "message": "维修员创建成功", "data": {"id": user_id, "name": name, "userId": student_id, "dormBuilding": building or None, "role": "repairman", "skills": _normalize_skills(payload.skills)}},
     )

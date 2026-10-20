@@ -37,11 +37,11 @@ function userFromToken(token: string): User | null {
   const payload = decodeJwtPayload(token);
   if (!payload) return null;
   if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) return null;
+  const tokenRole = payload.role as string;
   return {
     id: payload.userId as string,
     name: (payload.name as string) || '',
-    email: payload.email as string,
-    role: (payload.role as 'student' | 'technician' | 'admin') || 'student',
+    role: (tokenRole as 'user' | 'repairman' | 'admin') || 'user',
   };
 }
 

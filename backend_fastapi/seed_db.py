@@ -40,52 +40,52 @@ def seed():
     # ========== 基础账号 ==========
     print("👤 Creating accounts...")
     accounts = [
-        ("管理员", "admin@example.com", "admin123", "admin", None, None, "13800000000", None),
-        ("学生测试", "student@example.com", "student123", "student", "20230001", "1-302", "13800000001", None),
-        ("维修测试水电", "tech1@example.com", "tech123", "technician", None, None, "13800000002", "water,electricity"),
-        ("维修测试综合", "tech2@example.com", "tech123", "technician", None, None, "13800000003", "furniture,other"),
+        ("管理员", "admin123", "admin", "admin001", None, None, "13800000000", None),
+        ("用户测试", "user123", "user", "20230001", "公寓2栋", "1-302", "13800000001", None),
+        ("维修测试水电", "tech123", "repairman", "STAFF001", None, None, "13800000002", "water,electricity"),
+        ("维修测试综合", "tech123", "repairman", "STAFF002", None, None, "13800000003", "furniture,other"),
     ]
 
     now = now_str()
-    for name, email, pw, role, sid, room, phone, skills in accounts:
+    for name, pw, role, sid, building, room, phone, skills in accounts:
         cursor.execute(
-            "INSERT INTO users (id,name,email,password,role,studentId,dormRoom,phone,skills,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (rid(), name, email, pwd_context.hash(pw), role, sid, room, phone, skills, now)
+            "INSERT INTO users (id,name,password,role,studentId,dormBuilding,dormRoom,phone,skills,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (rid(), name, pwd_context.hash(pw), role, sid, building, room, phone, skills, now)
         )
 
     # ========== 模拟用户 ==========
-    students_data = [
-        ("陈小明", "chenxm@qq.com", "20230101", "1-301", "13800138001"),
-        ("李雨涵", "liyuh@163.com", "20230102", "2-302", "13800138002"),
-        ("张伟", "zhangw@126.com", "20230205", "3-205", "13800138003"),
-        ("王芳", "wangf@qq.com", "20230210", "4-310", "13800138004"),
-        ("刘洋", "liuy@gmail.com", "20230301", "5-101", "13800138005"),
-        ("赵静", "zhaoj@163.com", "20230315", "6-215", "13800138006"),
-        ("孙浩然", "sunhr@qq.com", "20230401", "7-401", "13800138007"),
-        ("周晓燕", "zhouxy@126.com", "20230410", "8-502", "13800138008"),
+    users_data = [
+        ("陈小明", "20230101", "1-301", "13800138001"),
+        ("李雨涵", "20230102", "2-302", "13800138002"),
+        ("张伟", "20230205", "3-205", "13800138003"),
+        ("王芳", "20230210", "4-310", "13800138004"),
+        ("刘洋", "20230301", "5-101", "13800138005"),
+        ("赵静", "20230315", "6-215", "13800138006"),
+        ("孙浩然", "20230401", "7-401", "13800138007"),
+        ("周晓燕", "20230410", "8-502", "13800138008"),
     ]
 
-    techs_data = [
-        ("李师傅", "tech_li@qq.com", "13800138011", "water,electricity"),
-        ("王师傅", "tech_wang@qq.com", "13800138012", "furniture,other"),
-        ("赵师傅", "tech_zhao@qq.com", "13800138013", "water,furniture,electricity,other"),
+    repairmen_data = [
+        ("李师傅", "STAFF011", "公寓3栋", "13800138011", "water,electricity"),
+        ("王师傅", "STAFF012", "公寓4栋", "13800138012", "furniture,other"),
+        ("赵师傅", "STAFF013", "启航楼（教学楼）", "13800138013", "water,furniture,electricity,other"),
     ]
 
-    student_ids = []
-    for name, email, sid, room, phone in students_data:
+    user_ids = []
+    for name, sid, room, phone in users_data:
         uid = rid()
-        student_ids.append(uid)
-        cursor.execute("INSERT INTO users (id,name,email,password,role,studentId,dormRoom,phone,createdAt) VALUES (?,?,?,?,?,?,?,?,?)",
-            (uid, name, email, pwd_context.hash("123456"), "student", sid, room, phone, now_str(random_dt(30, 40))))
+        user_ids.append(uid)
+        cursor.execute("INSERT INTO users (id,name,password,role,studentId,dormRoom,phone,createdAt) VALUES (?,?,?,?,?,?,?,?)",
+            (uid, name, pwd_context.hash("123456"), "user", sid, room, phone, now_str(random_dt(30, 40))))
 
-    tech_ids = []
-    for name, email, phone, skills in techs_data:
+    repairman_ids = []
+    for name, staff_id, building, phone, skills in repairmen_data:
         uid = rid()
-        tech_ids.append(uid)
-        cursor.execute("INSERT INTO users (id,name,email,password,role,phone,skills,createdAt) VALUES (?,?,?,?,?,?,?,?)",
-            (uid, name, email, pwd_context.hash("123456"), "technician", phone, skills, now_str(random_dt(30, 40))))
+        repairman_ids.append(uid)
+        cursor.execute("INSERT INTO users (id,name,password,role,studentId,dormBuilding,phone,skills,createdAt) VALUES (?,?,?,?,?,?,?,?,?)",
+            (uid, name, pwd_context.hash("123456"), "repairman", staff_id, building, phone, skills, now_str(random_dt(30, 40))))
 
-    print(f"  {len(students_data)} students + {len(techs_data)} technicians created")
+    print(f"  {len(users_data)} users + {len(repairmen_data)} repairmen created")
 
     # ========== 报修工单 ==========
     print("🔧 Creating repair tickets...")
@@ -106,8 +106,8 @@ def seed():
         ("leak", "urgent", ["天花板持续渗水，地面已有积水", "屋面漏水导致室内墙面和地面潮湿"]),
         ("office", "normal", ["办公设备无法正常开机，请检查电源和设备接口", "公共区域打印设备卡纸且无法继续工作"]),
     ]
-    statuses = [("closed", 0.45), ("completed", 0.10), ("pending_evaluation", 0.08),
-                ("in_progress", 0.12), ("approved", 0.10), ("pending", 0.10), ("rejected", 0.05)]
+    statuses = [("closed", 0.45), ("pending_evaluation", 0.18),
+                ("in_progress", 0.12), ("waiting", 0.12), ("ready", 0.08), ("rejected", 0.05)]
 
     work_notes = [
         "已检查并修复更换了损坏的零件恢复正常",
@@ -120,17 +120,11 @@ def seed():
         "家具五金件已更换结构稳固",
     ]
 
-    feedback_texts = [
-        "师傅很专业修得很快好评！", "维修及时态度很好非常满意",
-        "修好了感谢！", "效率很高问题解决了",
-        "师傅很认真负责还帮忙检查了其他地方",
-    ]
-
     repair_ids = []
     for _ in range(30):
         cat, pri, descs = random.choice(templates)
         desc = random.choice(descs)
-        student_id = random.choice(student_ids)
+        user_id = random.choice(user_ids)
         building = random.choice(DORM_BUILDINGS)
         room_num = str(random.randint(101, 608)) if building in DORM_APARTMENT_BUILDINGS else ""
         created_dt = random_dt(2, 25)
@@ -139,7 +133,7 @@ def seed():
         # Pick status
         r = random.random()
         cumulative = 0
-        status = "pending"
+        status = "waiting"
         for s, w in statuses:
             cumulative += w
             if r <= cumulative:
@@ -151,26 +145,22 @@ def seed():
 
         assigned_to = None
         admin_note = None
-        if status in ("approved", "in_progress", "completed", "pending_evaluation", "closed"):
-            assigned_to = random.choice(tech_ids)
-            tech_idx = tech_ids.index(assigned_to)
-            admin_note = f"[系统派单] 根据技能匹配与空闲度，自动分配给：{techs_data[tech_idx][0]}"
+        if status in ("waiting", "ready", "in_progress", "pending_evaluation", "closed"):
+            assigned_to = random.choice(repairman_ids)
+            repairman_idx = repairman_ids.index(assigned_to)
+            admin_note = f"[系统派单] 根据技能匹配与空闲度，自动分配给：{repairmen_data[repairman_idx][0]}"
 
-        work_note = random.choice(work_notes) if status in ("completed", "pending_evaluation", "closed") else None
+        work_note = random.choice(work_notes) if status in ("pending_evaluation", "closed") else None
 
         rating = None
-        feedback_tags = None
-        feedback_text = None
         if status == "closed":
             rating = random.choice([3, 4, 4, 5, 5, 5])
-            feedback_text = random.choice(feedback_texts)
-            feedback_tags = ",".join(random.sample(["专业", "快速", "态度好", "负责", "细心"], random.randint(1, 3)))
 
-        sla_breached = 1 if (status in ("pending", "approved") and datetime.now(timezone.utc) > datetime.fromisoformat(sla_due.replace("Z", "+00:00"))) else 0
+        sla_breached = 1 if (status in ("waiting", "ready", "in_progress") and datetime.now(timezone.utc) > datetime.fromisoformat(sla_due.replace("Z", "+00:00"))) else 0
 
         if status == "closed":
             updated_dt = created_dt + timedelta(hours=random.randint(1, sla_h - 1))
-        elif status in ("completed", "pending_evaluation"):
+        elif status == "pending_evaluation":
             updated_dt = created_dt + timedelta(hours=random.randint(1, sla_h))
         else:
             updated_dt = created_dt + timedelta(minutes=random.randint(5, 120))
@@ -179,39 +169,19 @@ def seed():
         repair_ids.append(repair_id)
         cursor.execute("""INSERT INTO repairs
             (id,studentId,dormBuilding,dormRoom,category,description,imageUrl,status,priority,
-             assignedTo,adminNote,workNote,rating,feedbackTags,feedbackText,slaDueDate,slaBreached,
-             aiCategory,aiPriority,createdAt,updatedAt)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (repair_id, student_id, building, room_num, cat, desc, None, status, pri,
-             assigned_to, admin_note, work_note, rating, feedback_tags, feedback_text, sla_due, sla_breached,
-             None, None, created, now_str(updated_dt)))
+             assignedTo,adminNote,workNote,rating,slaDueDate,slaBreached, createdAt,updatedAt)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (repair_id, user_id, building, room_num, cat, desc, None, status, pri,
+             assigned_to, admin_note, work_note, rating, sla_due, sla_breached, created, now_str(updated_dt)))
 
     print(f"  {len(repair_ids)} repair tickets created")
-
-    # ========== 评论 ==========
-    print("💬 Creating comments...")
-    comment_count = 0
-    for rid_ in random.sample(repair_ids, min(15, len(repair_ids))):
-        for j in range(random.randint(1, 3)):
-            cid = rid()
-            ctime = now_str(random_dt(3, 20))
-            if j % 2 == 0:
-                user_id = random.choice(student_ids)
-                content = random.choice(["请问什么时候能来修？", "师傅大概什么时候到？", "这个问题严重吗？", "能尽快处理吗？"])
-            else:
-                user_id = random.choice(tech_ids)
-                content = random.choice(["收到我下午过去看看", "已经在路上了", "配件已准备好马上到", "已安排处理请耐心等待"])
-            cursor.execute("INSERT INTO comments (id,repairId,userId,content,createdAt) VALUES (?,?,?,?,?)",
-                (cid, rid_, user_id, content, ctime))
-            comment_count += 1
-    print(f"  {comment_count} comments created")
 
     # ========== 评价 ==========
     print("⭐ Creating reviews...")
     review_count = 0
     for rid_ in random.sample(repair_ids, min(12, len(repair_ids))):
-        cursor.execute("INSERT INTO reviews (id,requestId,studentId,rating,comment,createdAt) VALUES (?,?,?,?,?,?)",
-            (rid(), rid_, random.choice(student_ids), random.choice([4, 4, 5, 5, 5]), random.choice(feedback_texts), now_str(random_dt(1, 15))))
+        cursor.execute("INSERT INTO reviews (id,requestId,studentId,rating,createdAt) VALUES (?,?,?,?,?)",
+            (rid(), rid_, random.choice(user_ids), random.choice([4, 4, 5, 5, 5]), now_str(random_dt(1, 15))))
         review_count += 1
     print(f"  {review_count} reviews created")
 
@@ -222,10 +192,8 @@ def seed():
         ("报修状态已更新", "您的报修申请状态已更新为: 维修中", "repair_status"),
         ("新报修任务分配", "您有一个新的报修任务被自动分配", "repair_assigned"),
         ("⏳ 任务即将超期", "您的任务即将超时请尽快处理！", "sla_warning"),
-        ("新评论", "您的工单有新的评论", "new_comment"),
-        ("新回复", "您的工单收到了新的回复", "new_comment"),
     ]
-    for uid in student_ids + tech_ids:
+    for uid in user_ids + repairman_ids:
         for _ in range(random.randint(2, 5)):
             title, msg, ntype = random.choice(notif_tpls)
             cursor.execute("INSERT INTO notifications (id,userId,title,message,type,relatedId,isRead,createdAt) VALUES (?,?,?,?,?,?,?,?)",
@@ -241,11 +209,10 @@ def seed():
         ("寝室号格式为“楼栋号-房间号”（例如：5-302）"),
         ("除卫生间堵塞等情况外，需拍摄现场照片，确保维修人员能直接识别问题。拍摄照片时请注意防止泄露个人隐私，避免出现广告、标语等无关内容，禁止使用修改、涂抹、添加滤镜文字或拼接图片。"),
     ]
-    # 保留当前公告正文不变；这些公告以正文列表维护，生成稳定的展示标题。
     for announcement_index, content in enumerate(anns, start=1):
         title = f"后勤公告{announcement_index}"
         cursor.execute("INSERT INTO announcements (id,title,content,authorId,createdAt) VALUES (?,?,?,?,?)",
-            (rid(), title, content, random.choice(tech_ids), now_str(random_dt(5, 20))))
+            (rid(), title, content, random.choice(repairman_ids), now_str(random_dt(5, 20))))
     print(f"  {len(anns)} announcements created")
 
     # ========== 配件 ==========
@@ -279,10 +246,10 @@ def seed():
     conn.close()
     print("\n✅ All seed data generated successfully!")
     print("\nTest accounts:")
-    print("  Admin:     admin@example.com / admin123")
-    print("  Student:   student@example.com / student123")
-    print("  Tech (水): tech1@example.com / tech123")
-    print("  Tech (综合): tech2@example.com / tech123")
+    print("  Admin:     admin001 / admin123")
+    print("  User:      20230001 / user123")
+    print("  Repairman (水): STAFF001 / tech123")
+    print("  Repairman (综合): STAFF002 / tech123")
 
 
 if __name__ == "__main__":

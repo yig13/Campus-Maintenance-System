@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/api/stats")
 async def get_stats(current_user: dict = Depends(verify_token)):
-    role = current_user.get("role", "student")
+    role = current_user.get("role", "user")
     user_id = current_user.get("userId", "")
 
     conn = get_db()
@@ -18,9 +18,9 @@ async def get_stats(current_user: dict = Depends(verify_token)):
     try:
         if role == "admin":
             total = conn.execute("SELECT COUNT(*) FROM repairs").fetchone()[0]
-            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'pending'").fetchone()[0]
+            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'waiting'").fetchone()[0]
             in_progress = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'in_progress'").fetchone()[0]
-            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE status IN ('completed', 'pending_evaluation', 'closed')").fetchone()[0]
+            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE status IN ('pending_evaluation', 'closed')").fetchone()[0]
             rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'rejected'").fetchone()[0]
             category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs GROUP BY category").fetchall()
             building_rows = conn.execute(
@@ -30,26 +30,26 @@ async def get_stats(current_user: dict = Depends(verify_token)):
                    GROUP BY dormBuilding
                    ORDER BY count DESC, dormBuilding ASC"""
             ).fetchall()
-        elif role == "technician":
+        elif role == "repairman":
             total = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ?", (user_id,)).fetchone()[0]
-            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'pending'", (user_id,)).fetchone()[0]
+            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'waiting'", (user_id,)).fetchone()[0]
             in_progress = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'in_progress'", (user_id,)).fetchone()[0]
-            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status IN ('completed', 'pending_evaluation', 'closed')", (user_id,)).fetchone()[0]
+            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status IN ('pending_evaluation', 'closed')", (user_id,)).fetchone()[0]
             rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'rejected'", (user_id,)).fetchone()[0]
             category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs WHERE assignedTo = ? GROUP BY category", (user_id,)).fetchall()
             building_rows = []
         else:
             total = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ?", (user_id,)).fetchone()[0]
-            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'pending'", (user_id,)).fetchone()[0]
+            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'waiting'", (user_id,)).fetchone()[0]
             in_progress = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'in_progress'", (user_id,)).fetchone()[0]
-            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status IN ('completed', 'pending_evaluation', 'closed')", (user_id,)).fetchone()[0]
+            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status IN ('pending_evaluation', 'closed')", (user_id,)).fetchone()[0]
             rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'rejected'", (user_id,)).fetchone()[0]
             category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs WHERE studentId = ? GROUP BY category", (user_id,)).fetchall()
             building_rows = []
 
         total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        student_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'student'").fetchone()[0]
-        technician_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'technician'").fetchone()[0]
+        user_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'user'").fetchone()[0]
+        repairman_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'repairman'").fetchone()[0]
         reviews = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
         avg_rating_row = conn.execute("SELECT AVG(rating) FROM reviews").fetchone()[0]
     finally:
@@ -73,8 +73,8 @@ async def get_stats(current_user: dict = Depends(verify_token)):
         total_repairs = conn.execute("SELECT COUNT(*) FROM repairs").fetchone()[0]
         breached_query = """
             SELECT COUNT(*) FROM repairs
-            WHERE (status IN ('pending', 'approved', 'in_progress') AND slaDueDate < ?)
-               OR (status IN ('completed', 'pending_evaluation', 'closed') AND updatedAt > slaDueDate)
+            WHERE (status IN ('waiting', 'ready', 'in_progress') AND slaDueDate < ?)
+               OR (status IN ('pending_evaluation', 'closed') AND updatedAt > slaDueDate)
         """
         now_str = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
         breached_repairs = conn.execute(breached_query, (now_str,)).fetchone()[0]
@@ -85,7 +85,7 @@ async def get_stats(current_user: dict = Depends(verify_token)):
         avg_response_query = """
             SELECT AVG(julianday(updatedAt) - julianday(createdAt)) * 24 as avg_hours
             FROM repairs
-            WHERE status IN ('completed', 'closed', 'pending_evaluation')
+            WHERE status IN ('closed', 'pending_evaluation')
         """
         avg_resp_row = conn.execute(avg_response_query).fetchone()
         avg_response_time = avg_resp_row["avg_hours"] if avg_resp_row and avg_resp_row["avg_hours"] else 0
@@ -114,8 +114,8 @@ async def get_stats(current_user: dict = Depends(verify_token)):
             "completedRequests": completed,
             "rejectedRequests": rejected,
             "totalUsers": total_users,
-            "studentCount": student_count,
-            "technicianCount": technician_count,
+            "userCount": user_count,
+            "repairmanCount": repairman_count,
             "categoryStats": category_stats,
             "buildingStats": building_stats,
             "avgRating": f"{avg_rating_row or 0:.1f}",

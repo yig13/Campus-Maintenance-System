@@ -7,19 +7,24 @@ from fastapi.responses import JSONResponse
 from database import get_db
 from auth import pwd_context, create_access_token
 from models import SignupRequest, LoginRequest
+from repair_taxonomy import DORM_BUILDINGS
 
 router = APIRouter()
 
 
 @router.post("/api/register")
 async def register(payload: SignupRequest):
-    # 只允许注册学生账号，维修员和管理员只能由管理员创建
-    role = 'student'
+    # 报修申请人统一注册为 user，可提交报修申请。
+    role = 'user'
 
-    if not payload.name.strip() or not (payload.phone or '').strip() or not (payload.studentId or '').strip():
-        raise HTTPException(status_code=400, detail="姓名、手机号和学号为必填项")
-    if "@" not in payload.email:
-        raise HTTPException(status_code=400, detail="邮箱格式不正确")
+    name = payload.username.strip()
+    phone = payload.phone.strip()
+    student_id = payload.userId.strip()
+    building = payload.dormBuilding.strip()
+    if not name or not phone or not student_id or not building:
+        raise HTTPException(status_code=400, detail="姓名、学号/工号、手机号和楼栋均为必填项")
+    if building not in DORM_BUILDINGS:
+        raise HTTPException(status_code=400, detail="楼栋选择无效")
     if len(payload.password) < 6:
         raise HTTPException(status_code=400, detail="密码长度不能少于6位")
     if payload.confirmPassword is not None and payload.password != payload.confirmPassword:
@@ -27,22 +32,21 @@ async def register(payload: SignupRequest):
 
     conn = get_db()
     try:
-        existing = conn.execute("SELECT id FROM users WHERE email = ?", (payload.email,)).fetchone()
+        existing = conn.execute("SELECT id FROM users WHERE studentId = ?", (student_id,)).fetchone()
         if existing:
-            raise HTTPException(status_code=400, detail="该邮箱已被注册")
+            raise HTTPException(status_code=400, detail="该学号/工号已注册")
 
         user_id = str(uuid.uuid4())
         now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
         hashed_password = pwd_context.hash(payload.password or "")
         conn.execute(
-            "INSERT INTO users (id, name, email, password, role, studentId, dormRoom, phone, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, payload.name.strip(), payload.email, hashed_password, role,
-             payload.studentId.strip(), payload.dormRoom, payload.phone.strip(), now),
+            "INSERT INTO users (id, name, password, role, studentId, dormBuilding, phone, skills, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, name, hashed_password, role, student_id, building, phone, "", now),
         )
         conn.commit()
     finally:
         conn.close()
-    print(f"[/api/register] User registered: {payload.name} ({payload.email})")
+    print(f"[/api/register] User account registered: {name} ({student_id})")
     return JSONResponse(
         status_code=201,
         content={"status": "success", "success": True, "message": "注册成功", "data": None},
@@ -51,20 +55,24 @@ async def register(payload: SignupRequest):
 
 @router.post("/api/login")
 async def login(payload: LoginRequest):
+    identifier = payload.userId.strip()
+    if not identifier:
+        raise HTTPException(status_code=400, detail="请输入学号/工号")
     conn = get_db()
     try:
-        user = conn.execute("SELECT * FROM users WHERE email = ?", (payload.email,)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE studentId = ? LIMIT 1", (identifier,)).fetchone()
     finally:
         conn.close()
     if not user:
-        raise HTTPException(status_code=401, detail="邮箱或密码错误")
+        raise HTTPException(status_code=401, detail="学号/工号或密码错误")
 
     password_match = pwd_context.verify(payload.password, user["password"])
     if not password_match:
-        raise HTTPException(status_code=401, detail="邮箱或密码错误")
+        raise HTTPException(status_code=401, detail="学号/工号或密码错误")
 
-    token = create_access_token(user["id"], user["name"], user["email"], user["role"])
-    print(f"[/api/login] Login successful: {user['name']} ({user['email']})")
+    username = user["studentId"] or identifier
+    token = create_access_token(user["id"], user["name"], user["role"], username=username)
+    print(f"[/api/login] Login successful: {user['name']} ({username})")
     return {
         "status": "success",
         "success": True,
@@ -72,9 +80,9 @@ async def login(payload: LoginRequest):
         "user": {
             "id": user["id"],
             "name": user["name"],
-            "email": user["email"],
             "role": user["role"],
-            "studentId": user["studentId"],
+            "userId": user["studentId"],
+            "dormBuilding": user["dormBuilding"] if "dormBuilding" in user.keys() else None,
             "dormRoom": user["dormRoom"],
             "phone": user["phone"],
             "skills": user["skills"] if "skills" in user.keys() else None,

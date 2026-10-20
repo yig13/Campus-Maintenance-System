@@ -10,8 +10,8 @@ import {
 import { API, authFetch } from '../lib/api';
 import NotificationsMenu from '../components/custom/NotificationsMenu';
 import AnnouncementsBanner from '../components/custom/AnnouncementsBanner';
-import StudentView from '../components/dashboard/StudentView';
-import TechnicianView from '../components/dashboard/TechnicianView';
+import UserView from '../components/dashboard/UserView';
+import RepairmanView from '../components/dashboard/RepairmanView';
 import AdminView from '../components/dashboard/AdminView';
 import SettingsModal from '../components/dashboard/SettingsModal';
 import { Badge } from '../components/shared/StatusBadge';
@@ -48,8 +48,8 @@ export default function Index() {
   }
 
   const displayProfile = profile || user;
-  const roleLabel = displayProfile.role === 'student' ? t('role_student') : displayProfile.role === 'technician' ? t('role_technician') : t('role_admin');
-  const roleColor = displayProfile.role === 'admin' ? 'bg-purple-100 text-purple-700' : displayProfile.role === 'technician' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700';
+  const roleLabel = displayProfile.role === 'user' ? t('role_user') : displayProfile.role === 'repairman' ? t('role_repairman') : t('role_admin');
+  const roleColor = displayProfile.role === 'admin' ? 'bg-purple-100 text-purple-700' : displayProfile.role === 'repairman' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700';
 
   const showProfile = () => {
     toast(
@@ -57,8 +57,8 @@ export default function Index() {
         <p className="font-bold text-foreground text-base border-b border-border/50 pb-1 mb-1">👤 个人资料</p>
         <p className="text-muted-foreground"><span className="text-foreground font-semibold">姓名：</span>{displayProfile.name}</p>
         <p className="text-muted-foreground"><span className="text-foreground font-semibold">身份：</span>{roleLabel}</p>
-        <p className="text-muted-foreground"><span className="text-foreground font-semibold">邮箱：</span>{displayProfile.email}</p>
-        {displayProfile.studentId && <p className="text-muted-foreground"><span className="text-foreground font-semibold">学号：</span>{displayProfile.studentId}</p>}
+        {displayProfile.userId && <p className="text-muted-foreground"><span className="text-foreground font-semibold">学号/工号：</span>{displayProfile.userId}</p>}
+        {displayProfile.dormBuilding && <p className="text-muted-foreground"><span className="text-foreground font-semibold">楼栋：</span>{displayProfile.dormBuilding}</p>}
         {displayProfile.dormRoom && <p className="text-muted-foreground"><span className="text-foreground font-semibold">宿舍：</span>{displayProfile.dormRoom}</p>}
         {displayProfile.phone && <p className="text-muted-foreground"><span className="text-foreground font-semibold">电话：</span>{displayProfile.phone}</p>}
       </div>,
@@ -134,16 +134,16 @@ export default function Index() {
               </div>
             </div>
             <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center hover:scale-110 hover:rotate-6 transition duration-300 select-none shadow-lg">
-              {displayProfile.role === 'student' ? <Home className="w-7 h-7 text-white animate-bounce-subtle" /> :
-               displayProfile.role === 'technician' ? <Wrench className="w-7 h-7 text-white" /> :
+              {displayProfile.role === 'user' ? <Home className="w-7 h-7 text-white animate-bounce-subtle" /> :
+               displayProfile.role === 'repairman' ? <Wrench className="w-7 h-7 text-white" /> :
                <BarChart2 className="w-7 h-7 text-white" />}
             </div>
           </div>
         </div>
 
         {/* Role-based view */}
-        {user.role === 'student' && <StudentView token={token} />}
-        {user.role === 'technician' && <TechnicianView token={token} />}
+        {user.role === 'user' && <UserView token={token} />}
+        {user.role === 'repairman' && <RepairmanView token={token} />}
         {user.role === 'admin' && <AdminView token={token} />}
       </main>
 

@@ -8,8 +8,6 @@ export const translations = {
     settings: '个人设置',
     username: '姓名',
     role: '身份',
-    email: '邮箱',
-    studentId: '学号',
     dormRoom: '宿舍号',
     phone: '电话',
     skills: '专业技能',
@@ -33,7 +31,6 @@ export const translations = {
     tabStats: '数据统计',
     tabParts: '库存管理',
     tabUsers: '用户管理',
-    tabAI: 'AI助手配置',
     tabTasks: '任务列表',
     tabMyPerformance: '我的绩效',
 
@@ -83,8 +80,8 @@ export const translations = {
     category_other: '其他类',
 
     // Statuses
-    status_pending: '待审批',
-    status_approved: '已审批/待接单',
+    status_waiting: '待接单',
+    status_ready: '已接单',
     status_in_progress: '维修中',
     status_completed: '已完工',
     status_pending_evaluation: '待评价',
@@ -92,8 +89,8 @@ export const translations = {
     status_rejected: '已拒绝',
 
     // Roles
-    role_student: '学生',
-    role_technician: '维修员',
+    role_user: '用户',
+    role_repairman: '维修员',
     role_admin: '管理员',
 
     // Student View
@@ -105,15 +102,14 @@ export const translations = {
     faultDescription: '故障详情描述',
     uploadPhoto: '上传故障照片',
     photoTip: '支持 png, jpg, jpeg 格式，大小不超过 5MB',
-    describePlaceholder: '请详细描述故障情况，例如：洗手池下方软管开裂漏水，不停往外渗水...',
-    aiDiagnosis: '宿宝 AI 图片预检诊断中...',
+    describePlaceholder: '请详细描述故障情况，最多可输入100字。',
     dispatchBadge: '系统派单',
 
     // Admin View
     repairList: '报修申请列表',
     exportCSV: '导出 CSV',
     assignTask: '指派任务/审批',
-    selectTech: '选择维修人员',
+    selectRepairman: '选择维修员',
     adminNote: '管理员内部备注',
     priorityLabel: '报修优先级',
     partInventory: '备品备件库存列表',
@@ -133,7 +129,7 @@ export const translations = {
 
     // Stats
     totalRepairs: '总报修数',
-    pendingCount: '待处理',
+    pendingCount: '待接单',
     inProgressCount: '维修中',
     completedCount: '已完成',
     rejectedCount: '已拒绝',
@@ -145,20 +141,6 @@ export const translations = {
     rankCount: '消耗数量',
     rankCost: '总成本',
 
-    // Chat widget
-    chatGreeting: '你好呀！我是宿舍小助手 **「宿宝」** 🤖✨。有什么关于宿舍报修、起居生活或管理系统的问题，都可以随时问我哦！',
-    chatPlaceholder: '发送给宿宝的问题...',
-    chatTooltip: '问问宿宝 🤖',
-    chatReset: '对话已重置。你好，我是「宿宝」，有什么我可以帮你的吗？',
-    
-    // Suggestion Chips
-    chip_power: '宿舍停电怎么办？',
-    chip_submit: '如何提交报修单？',
-    chip_password: '修改我的密码',
-    chip_tech_power: '用电安全指引',
-    chip_tech_leak: '水管漏水应急处理',
-    chip_admin_export: '如何导出报修记录？',
-    chip_admin_ai: '如何启用新AI模型？'
   },
   en: {
     title: 'Facilities Maintenance Platform',
@@ -169,8 +151,6 @@ export const translations = {
     settings: 'Settings',
     username: 'Name',
     role: 'Role',
-    email: 'Email',
-    studentId: 'Student ID',
     dormRoom: 'Room No.',
     phone: 'Phone',
     skills: 'Skills',
@@ -194,7 +174,6 @@ export const translations = {
     tabStats: 'Statistics',
     tabParts: 'Inventory',
     tabUsers: 'Users',
-    tabAI: 'AI Config',
     tabTasks: 'Tasks List',
     tabMyPerformance: 'Performance',
 
@@ -243,8 +222,8 @@ export const translations = {
     category_other: 'Other',
 
     // Statuses
-    status_pending: 'Pending',
-    status_approved: 'Approved/Assigned',
+    status_waiting: 'Waiting for acceptance',
+    status_ready: 'Accepted',
     status_in_progress: 'In Progress',
     status_completed: 'Completed',
     status_pending_evaluation: 'Pending Review',
@@ -252,8 +231,8 @@ export const translations = {
     status_rejected: 'Rejected',
 
     // Roles
-    role_student: 'Student',
-    role_technician: 'Technician',
+    role_user: 'User',
+    role_repairman: 'Repairman',
     role_admin: 'Admin',
 
     // Student View
@@ -265,15 +244,14 @@ export const translations = {
     faultDescription: 'Description',
     uploadPhoto: 'Upload Photo',
     photoTip: 'Supports png, jpg, jpeg formats, up to 5MB',
-    describePlaceholder: 'Provide details about the issue (e.g., sink leaking under the basin)...',
-    aiDiagnosis: 'Subao AI analyzing image...',
+    describePlaceholder: 'Please describe the issue in detail (max 100 characters).',
     dispatchBadge: 'System dispatched',
 
     // Admin View
     repairList: 'Repairs List',
     exportCSV: 'Export CSV',
     assignTask: 'Approve & Assign',
-    selectTech: 'Select Technician',
+    selectRepairman: 'Select Repairman',
     adminNote: 'Internal Admin Note',
     priorityLabel: 'Repair Priority',
     partInventory: 'Parts Inventory',
@@ -293,7 +271,7 @@ export const translations = {
 
     // Stats
     totalRepairs: 'Total Repairs',
-    pendingCount: 'Pending',
+    pendingCount: 'Waiting for acceptance',
     inProgressCount: 'In Progress',
     completedCount: 'Completed',
     rejectedCount: 'Rejected',
@@ -305,19 +283,5 @@ export const translations = {
     rankCount: 'Quantity',
     rankCost: 'Total Cost',
 
-    // Chat widget
-    chatGreeting: 'Hello! I am your dorm assistant **"Subao"** 🤖✨. Ask me anything about repairs, utilities, or using this management system!',
-    chatPlaceholder: 'Ask Subao a question...',
-    chatTooltip: 'Ask Subao 🤖',
-    chatReset: 'Chat reset. Hello! I am Subao, how can I help you today?',
-
-    // Suggestion Chips
-    chip_power: 'No electricity in dorm?',
-    chip_submit: 'How to submit a repair request?',
-    chip_password: 'Change my password',
-    chip_tech_power: 'Electrical safety guide',
-    chip_tech_leak: 'Plumbing leak emergency',
-    chip_admin_export: 'How to export repairs?',
-    chip_admin_ai: 'How to enable new AI model?'
   }
 };

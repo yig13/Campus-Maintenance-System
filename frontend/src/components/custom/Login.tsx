@@ -8,7 +8,7 @@ import { API } from '../../lib/api';
 export default function Login() {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -23,8 +23,8 @@ export default function Login() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!email || !password) {
-      setError('请填写邮箱和密码');
+    if (!userId.trim() || !password) {
+      setError('请填写学号/工号和密码');
       return;
     }
     setLoading(true);
@@ -32,16 +32,16 @@ export default function Login() {
       const res = await fetch(API.AUTH.LOGIN, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ userId: userId.trim(), password }),
       });
-      const data = await res.json() as { status: string; token: string; user?: { name: string; email: string; role: string }; message?: string; detail?: string };
+      const data = await res.json() as { status: string; token: string; user?: { name: string; role: string }; message?: string; detail?: string };
       if (data.status === 'success' && data.token) {
         login(data.token);
         localStorage.setItem('userName', data.user?.name || '');
         toast.success('登录成功');
         navigate('/dashboard', { replace: true });
       } else {
-        setError(data.detail || data.message || '邮箱或密码错误');
+        setError(data.detail || data.message || '学号/工号或密码错误');
       }
     } catch {
       setError('网络错误，请稍后重试');
@@ -64,12 +64,13 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">邮箱</label>
+              <label className="block text-sm font-medium text-foreground mb-1">学号/工号</label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="请输入邮箱"
+                type="text"
+                required
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                placeholder="请输入学号/工号"
                 className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
               />
             </div>
@@ -78,6 +79,7 @@ export default function Login() {
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="请输入密码"

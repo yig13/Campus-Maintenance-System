@@ -11,13 +11,13 @@ from fastapi.responses import StreamingResponse
 from database import get_db, VALID_STATUSES, STATUS_LABELS
 from auth import verify_token, require_admin
 from models import CreateRepairRequest, UpdateRepairStatus, EvaluateRequest
-from repair_taxonomy import DORM_BUILDINGS, DORM_APARTMENT_BUILDINGS, VALID_CATEGORIES, CATEGORY_TO_SKILL
+from repair_taxonomy import DORM_BUILDINGS, DORM_APARTMENT_BUILDINGS, VALID_CATEGORIES
 
 router = APIRouter()
 
 
 def _mask_phone(phone: Optional[str]) -> str:
-    """Hide the middle four digits while a technician has not started the task."""
+    """Hide the middle four digits while a repairman has not started the task."""
     if not phone:
         return ""
     digits = "".join(char for char in phone if char.isdigit())
@@ -34,15 +34,15 @@ async def get_repairs(
     current_user: dict = Depends(verify_token)
 ):
     conn = get_db()
-    role = current_user.get("role", "student")
+    role = current_user.get("role", "user")
     user_id = current_user.get("userId", "")
 
     try:
         conditions = []
         params = []
 
-        if role == "technician":
-            conditions.append("r.assignedTo = ?")
+        if role == "repairman":
+            conditions.append("(r.assignedTo = ? OR (r.assignedTo IS NULL AND r.status = 'waiting'))")
             params.append(user_id)
         elif role != "admin":
             conditions.append("r.studentId = ?")
@@ -59,18 +59,17 @@ async def get_repairs(
         total_query = f"SELECT COUNT(*) FROM repairs r {where_clause}"
         total = conn.execute(total_query, params).fetchone()[0]
 
-        # 维修员/管理员按紧急程度排序（待处理优先 + SLA截止时间升序），学生按创建时间倒序
-        if role in ("technician", "admin"):
+        # 维修员/管理员按紧急程度排序（待接单优先 + SLA截止时间升序），用户按创建时间倒序
+        if role in ("repairman", "admin"):
             order_clause = """ORDER BY
                 CASE r.status
-                    WHEN 'pending' THEN 1
-                    WHEN 'approved' THEN 2
+                    WHEN 'waiting' THEN 1
+                    WHEN 'ready' THEN 2
                     WHEN 'in_progress' THEN 3
                     WHEN 'pending_evaluation' THEN 4
-                    WHEN 'completed' THEN 5
-                    WHEN 'closed' THEN 6
-                    WHEN 'rejected' THEN 7
-                    ELSE 8
+                    WHEN 'closed' THEN 5
+                    WHEN 'rejected' THEN 6
+                    ELSE 7
                 END,
                 r.slaDueDate ASC"""
         else:
@@ -78,8 +77,9 @@ async def get_repairs(
 
         data_query = f"""
             SELECT r.*,
-                   u.name as studentName,
-                   u.phone as studentPhone,
+                   r.studentId as userId,
+                   u.name as userName,
+                   u.phone as userPhone,
                    t.name as assignedToName
             FROM repairs r
             LEFT JOIN users u ON r.studentId = u.id
@@ -100,13 +100,13 @@ async def get_repairs(
 
     data = [dict(r) for r in rows]
     for repair in data:
-        phone = repair.pop("studentPhone", None)
-        # 联系电话仅返回给该工单的维修人员。待接单（pending/approved）脱敏；
+        phone = repair.pop("userPhone", None)
+        # 联系电话仅返回给该工单的维修人员。待接单时脱敏；
         # 维修人员开始处理后显示完整号码，便于联系预约上门。
-        if role == "technician":
-            repair["studentPhone"] = (
+        if role == "repairman":
+            repair["userPhone"] = (
                 _mask_phone(phone)
-                if repair.get("status") in ("pending", "approved")
+                if repair.get("status") == "waiting"
                 else (phone or "")
             )
     if page is not None and pageSize is not None:
@@ -121,20 +121,13 @@ async def get_repairs(
         return {"success": True, "data": data, "total": total}
 
 
-# AI 文本分析接口暂时屏蔽；普通报修流程不依赖此接口。
-# @router.post("/api/repairs/analyze")
-# async def analyze_repair(payload: AnalyzeRepairRequest, current_user: dict = Depends(verify_token)):
-#     cat, pri, eng = await _get_ai_analysis(payload.description)
-#     return {"success": True, "data": {"category": cat, "priority": pri, "engine": eng}}
-
-
 @router.post("/api/repairs")
 async def create_repair(payload: CreateRepairRequest, current_user: dict = Depends(verify_token)):
     user_id = current_user.get("userId", "")
-    role = current_user.get("role", "student")
+    role = current_user.get("role", "user")
 
-    if role != "student":
-        raise HTTPException(status_code=403, detail="只有学生可以提交报修申请")
+    if role != "user":
+        raise HTTPException(status_code=403, detail="只有普通用户可以提交报修申请")
 
     if payload.category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail="报修类型无效")
@@ -149,17 +142,13 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
     room = payload.dormRoom.strip()
     if not building or (building in DORM_APARTMENT_BUILDINGS and not room) or not payload.description.strip():
         raise HTTPException(status_code=400, detail="请填写所有必填项")
-
-    # if len(payload.description.strip()) < 5:
-    #     raise HTTPException(status_code=400, detail="问题描述至少需要5个字")
-
-    # AI 分类/评级暂时停用；对应数据库列仍保留并写入 NULL，不改动数据库结构。
-    ai_cat, ai_pri = None, None
+    if len(payload.description) > 100:
+        raise HTTPException(status_code=400, detail="故障详情最多可输入100字")
 
     repair_id = str(uuid.uuid4())
     now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
 
-    # 计算 SLA 截至时间 (基于 UTC 时间戳)
+    # 响应 SLA 截止时间（独立于系统派单等待时限）
     sla_hours = {"urgent": 2, "high": 6, "normal": 24, "low": 48}
     hours = sla_hours.get(payload.priority, 24)
     sla_due_date = (datetime.now(timezone.utc) + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -167,59 +156,15 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
     conn = get_db()
     try:
         assigned_to = None
-        status = "pending"
+        status = "waiting"
         admin_note = None
-
-        techs = conn.execute("SELECT id, name, skills FROM users WHERE role = 'technician'").fetchall()
-        skill_group = CATEGORY_TO_SKILL.get(payload.category)
-        matching_techs = [
-            t for t in techs
-            if skill_group and t['skills'] and skill_group in [s.strip() for s in t['skills'].split(',')]
-        ]
-
-        if matching_techs:
-            # 收集每位候选维修员的综合数据
-            candidates = []
-            for tech in matching_techs:
-                tech_id = tech['id']
-                active_tasks = conn.execute(
-                    "SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status IN ('pending', 'approved', 'in_progress')",
-                    (tech_id,)
-                ).fetchone()[0]
-                # 跳过已满载的维修员（>= 5 单）
-                if active_tasks >= 5:
-                    continue
-                avg_row = conn.execute(
-                    "SELECT AVG(r.rating) FROM reviews r JOIN repairs rep ON r.requestId = rep.id WHERE rep.assignedTo = ?",
-                    (tech_id,)
-                ).fetchone()
-                avg_rating = round(avg_row[0], 1) if avg_row[0] else 0
-                total_completed = conn.execute(
-                    "SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status IN ('completed', 'closed')",
-                    (tech_id,)
-                ).fetchone()[0]
-                candidates.append({
-                    "id": tech_id,
-                    "name": tech['name'],
-                    "skills": tech['skills'],
-                    "activeTasks": active_tasks,
-                    "avgRating": avg_rating,
-                    "totalCompleted": total_completed,
-                })
-
-            if candidates:
-                # AI 派单暂时屏蔽，保留原有技能匹配与最小负载规则派单。
-                best = min(candidates, key=lambda c: c["activeTasks"])
-                assigned_to = best["id"]
-                status = "approved"
-                admin_note = f"[系统派单] 技能匹配+负载均衡（当前 {best['activeTasks']} 单），自动分配给：{best['name']}"
 
         conn.execute(
             """INSERT INTO repairs
-               (id, studentId, dormBuilding, dormRoom, category, description, imageUrl, status, priority, assignedTo, adminNote, slaDueDate, slaBreached, aiCategory, aiPriority, createdAt, updatedAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, studentId, dormBuilding, dormRoom, category, description, imageUrl, status, priority, assignedTo, adminNote, slaDueDate, slaBreached, createdAt, updatedAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (repair_id, user_id, building, room, payload.category,
-             payload.description, payload.imageUrl, status, payload.priority, assigned_to, admin_note, sla_due_date, 0, ai_cat, ai_pri, now, now),
+             payload.description, payload.imageUrl, status, payload.priority, assigned_to, admin_note, sla_due_date, 0, now, now),
         )
 
         if assigned_to:
@@ -232,7 +177,8 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
 
         row = conn.execute("""
             SELECT r.*,
-                   u.name as studentName,
+                   r.studentId as userId,
+                   u.name as userName,
                    t.name as assignedToName
             FROM repairs r
             LEFT JOIN users u ON r.studentId = u.id
@@ -248,7 +194,7 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
 
 @router.patch("/api/repairs/{repair_id}/status")
 async def update_repair_status(repair_id: str, payload: UpdateRepairStatus, current_user: dict = Depends(verify_token)):
-    role = current_user.get("role", "student")
+    role = current_user.get("role", "user")
     user_id = current_user.get("userId", "")
     now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
 
@@ -258,14 +204,21 @@ async def update_repair_status(repair_id: str, payload: UpdateRepairStatus, curr
         if not existing:
             raise HTTPException(status_code=404, detail="报修记录不存在")
 
-        if role == "student":
-            raise HTTPException(status_code=403, detail="学生无法更新报修状态")
+        if role == "user":
+            raise HTTPException(status_code=403, detail="普通用户无法更新报修状态")
 
-        if role == "technician":
-            if existing["assignedTo"] != user_id:
+        if role == "repairman":
+            claiming_unassigned = existing["assignedTo"] is None and existing["status"] == "waiting" and payload.status == "ready"
+            if existing["assignedTo"] != user_id and not claiming_unassigned:
                 raise HTTPException(status_code=403, detail="只能更新自己分配到的任务")
-            if payload.status not in ("in_progress", "completed"):
-                raise HTTPException(status_code=400, detail="维修人员只能将状态更新为维修中或已完成")
+            if payload.status not in ("ready", "in_progress", "completed"):
+                raise HTTPException(status_code=400, detail="维修人员只能接单、开始维修或完成维修")
+            if payload.status == "ready" and existing["status"] != "waiting":
+                raise HTTPException(status_code=400, detail="只有待接单工单可以接单")
+            if payload.status == "in_progress" and existing["status"] != "ready":
+                raise HTTPException(status_code=400, detail="只有已接单工单可以开始维修")
+            if payload.status == "completed" and existing["status"] != "in_progress":
+                raise HTTPException(status_code=400, detail="只有维修中的工单可以完成")
             if payload.status == "completed":
                 if not payload.workNote or len(payload.workNote.strip()) < 5:
                     raise HTTPException(status_code=400, detail="完成维修时必须填写至少5个字的维修记录(workNote)")
@@ -297,13 +250,6 @@ async def update_repair_status(repair_id: str, payload: UpdateRepairStatus, curr
             if payload.status not in valid_statuses:
                 raise HTTPException(status_code=400, detail="无效的状态")
 
-            # 管理员可自由切换所有状态
-            all_statuses = {'pending', 'approved', 'in_progress', 'completed', 'pending_evaluation', 'closed', 'rejected'}
-            admin_transitions = {s: all_statuses - {s} for s in all_statuses}
-            if payload.status != existing["status"] and payload.status not in admin_transitions.get(existing["status"], set()):
-                current_label = STATUS_LABELS.get(existing["status"], existing["status"])
-                target_label = STATUS_LABELS.get(payload.status, payload.status)
-                raise HTTPException(status_code=400, detail=f"管理员无法将工单从 {current_label} 直接更改为 {target_label}")
         updates = []
         values = []
 
@@ -311,12 +257,23 @@ async def update_repair_status(repair_id: str, payload: UpdateRepairStatus, curr
             updates.append("status = ?")
             values.append(payload.status)
 
+        if role == "repairman" and existing["assignedTo"] is None and payload.status == "ready":
+            updates.append("assignedTo = ?")
+            values.append(user_id)
+
         if payload.workNote is not None:
             updates.append("workNote = ?")
             values.append(payload.workNote)
 
         if role == "admin":
             if payload.assignedTo is not None:
+                if payload.assignedTo:
+                    assignee = conn.execute(
+                        "SELECT id FROM users WHERE id = ? AND role = 'repairman'",
+                        (payload.assignedTo,),
+                    ).fetchone()
+                    if not assignee:
+                        raise HTTPException(status_code=400, detail="分配对象不是有效的维修员")
                 updates.append("assignedTo = ?")
                 values.append(payload.assignedTo if payload.assignedTo else None)
             if payload.adminNote is not None:
@@ -325,24 +282,40 @@ async def update_repair_status(repair_id: str, payload: UpdateRepairStatus, curr
             if payload.priority is not None:
                 if payload.priority not in ("low", "normal", "high", "urgent"):
                     raise HTTPException(status_code=400, detail="优先级无效")
-                updates.append("priority = ?")
-                values.append(payload.priority)
-                sla_hours = {"urgent": 2, "high": 6, "normal": 24, "low": 48}
-                hours = sla_hours.get(payload.priority, 24)
-                new_sla = (datetime.now(timezone.utc) + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-                updates.append("slaDueDate = ?")
-                values.append(new_sla)
+                if payload.priority != existing["priority"]:
+                    updates.append("priority = ?")
+                    values.append(payload.priority)
+                    sla_hours = {"urgent": 2, "high": 6, "normal": 24, "low": 48}
+                    hours = sla_hours.get(payload.priority, 24)
+                    new_sla = (datetime.now(timezone.utc) + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                    updates.append("slaDueDate = ?")
+                    values.append(new_sla)
+
+            # 管理员释放工单时按“重新提交”处理：重启响应 SLA 计时。
+            if payload.status == "waiting" and payload.assignedTo == "":
+                if payload.priority is None or payload.priority == existing["priority"]:
+                    sla_hours = {"urgent": 2, "high": 6, "normal": 24, "low": 48}
+                    hours = sla_hours.get(existing["priority"], 24)
+                    new_sla = (datetime.now(timezone.utc) + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                    updates.append("slaDueDate = ?")
+                    values.append(new_sla)
+                updates.append("slaBreached = 0")
 
         updates.append("updatedAt = ?")
         values.append(now)
-        values.append(repair_id)
-
-        conn.execute(f"UPDATE repairs SET {', '.join(updates)} WHERE id = ?", values)
-        conn.commit()
-
+        if role == "repairman" and existing["assignedTo"] is None and payload.status == "ready":
+            cursor = conn.execute(
+                f"UPDATE repairs SET {', '.join(updates)} WHERE id = ? AND assignedTo IS NULL AND status = 'waiting'",
+                [*values, repair_id],
+            )
+            if cursor.rowcount == 0:
+                raise HTTPException(status_code=409, detail="该工单已被其他维修员接单")
+        else:
+            conn.execute(f"UPDATE repairs SET {', '.join(updates)} WHERE id = ?", [*values, repair_id])
         row = conn.execute("""
             SELECT r.*,
-                   u.name as studentName,
+                   r.studentId as userId,
+                   u.name as userName,
                    t.name as assignedToName
             FROM repairs r
             LEFT JOIN users u ON r.studentId = u.id
@@ -357,12 +330,19 @@ async def update_repair_status(repair_id: str, payload: UpdateRepairStatus, curr
                 (str(uuid.uuid4()), existing["studentId"], "报修状态已更新", f"您的报修申请状态已更新为: {STATUS_LABELS.get(payload.status, payload.status)}", "repair_status", repair_id, 0, now_time)
             )
 
-        if payload.assignedTo and payload.assignedTo != existing["assignedTo"]:
+        assignment_changed = payload.assignedTo is not None and payload.assignedTo != existing["assignedTo"]
+        if assignment_changed and payload.assignedTo:
             conn.execute(
                 "INSERT INTO notifications (id, userId, title, message, type, relatedId, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (str(uuid.uuid4()), payload.assignedTo, "新报修任务分配", "您有一个新的报修任务被分配", "repair_assigned", repair_id, 0, now_time)
             )
+        if assignment_changed and existing["assignedTo"]:
+            conn.execute(
+                "INSERT INTO notifications (id, userId, title, message, type, relatedId, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (str(uuid.uuid4()), existing["assignedTo"], "工单分配已变更", "管理员已调整该工单的维修员分配", "repair_assigned", repair_id, 0, now_time)
+            )
 
+        # 工单字段、物料扣减和通知作为同一事务提交，避免部分写入。
         conn.commit()
     finally:
         conn.close()
@@ -373,12 +353,12 @@ async def update_repair_status(repair_id: str, payload: UpdateRepairStatus, curr
 
 @router.post("/api/repairs/{repair_id}/evaluate")
 async def evaluate_repair(repair_id: str, payload: EvaluateRequest, current_user: dict = Depends(verify_token)):
-    """学生评价工单接口 - 将工单状态从 pending_evaluation 更新为 closed"""
+    """用户评价工单接口 - 将工单状态从 pending_evaluation 更新为 closed"""
     user_id = current_user.get("userId", "")
-    role = current_user.get("role", "student")
+    role = current_user.get("role", "user")
 
-    if role != "student":
-        raise HTTPException(status_code=403, detail="只有学生可以评价")
+    if role != "user":
+        raise HTTPException(status_code=403, detail="只有普通用户可以评价")
 
     if payload.rating < 1 or payload.rating > 5:
         raise HTTPException(status_code=400, detail="评分必须在1-5之间")
@@ -398,25 +378,27 @@ async def evaluate_repair(repair_id: str, payload: EvaluateRequest, current_user
 
         now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
 
-        conn.execute(
+        updated = conn.execute(
             """UPDATE repairs
                SET rating = ?, status = 'closed', updatedAt = ?
-               WHERE id = ?""",
-            (payload.rating, now, repair_id),
+               WHERE id = ? AND studentId = ? AND status = 'pending_evaluation'""",
+            (payload.rating, now, repair_id, user_id),
         )
-        conn.commit()
+        if updated.rowcount == 0:
+            raise HTTPException(status_code=409, detail="工单已被评价或结案")
 
         review_id = str(uuid.uuid4())
         # 仅保存星级；评论字段保留在数据库中但不再写入用户评语。
         conn.execute(
-            "INSERT INTO reviews (id, requestId, studentId, rating, comment, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
-            (review_id, repair_id, user_id, payload.rating, None, now),
+            "INSERT INTO reviews (id, requestId, studentId, rating, createdAt) VALUES (?, ?, ?, ?, ?)",
+            (review_id, repair_id, user_id, payload.rating, now),
         )
         conn.commit()
 
         row = conn.execute("""
             SELECT r.*,
-                   u.name as studentName,
+                   r.studentId as userId,
+                   u.name as userName,
                    t.name as assignedToName
             FROM repairs r
             LEFT JOIN users u ON r.studentId = u.id
@@ -435,7 +417,7 @@ async def export_repairs(current_user: dict = Depends(require_admin)):
     conn = get_db()
     try:
         rows = conn.execute("""
-            SELECT r.id, u.name as studentName, r.dormBuilding, r.dormRoom,
+            SELECT r.id, u.name as userName, r.dormBuilding, r.dormRoom,
                    r.category, r.status, r.priority, t.name as assignedToName,
                    r.createdAt, r.updatedAt
             FROM repairs r
@@ -449,13 +431,13 @@ async def export_repairs(current_user: dict = Depends(require_admin)):
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Repair ID", "Student Name", "Building", "Room", "Category",
-        "Status", "Priority", "Assigned Technician", "Created At", "Updated At"
+        "Repair ID", "User Name", "Building", "Room", "Category",
+        "Status", "Priority", "Assigned Repairman", "Created At", "Updated At"
     ])
 
     for row in rows:
         writer.writerow([
-            row["id"], row["studentName"], row["dormBuilding"], row["dormRoom"],
+            row["id"], row["userName"], row["dormBuilding"], row["dormRoom"],
             row["category"], row["status"], row["priority"], row["assignedToName"],
             row["createdAt"], row["updatedAt"]
         ])

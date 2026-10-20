@@ -3,6 +3,7 @@ import { Shield, Lock, X } from 'lucide-react';
 import { API, authFetch } from '../../lib/api';
 import { toast } from 'sonner';
 import { User, ApiResponse } from '../../types';
+import { DORM_BUILDING_GROUPS } from '../shared/constants';
 
 export default function SettingsModal({
   isOpen,
@@ -21,7 +22,8 @@ export default function SettingsModal({
   const [profileForm, setProfileForm] = useState({
     name: '',
     phone: '',
-    studentId: '',
+    userId: '',
+    dormBuilding: '',
     dormRoom: ''
   });
   const [passwordForm, setPasswordForm] = useState({
@@ -36,7 +38,8 @@ export default function SettingsModal({
       setProfileForm({
         name: initialProfile.name || '',
         phone: initialProfile.phone || '',
-        studentId: initialProfile.studentId || '',
+        userId: initialProfile.userId || '',
+        dormBuilding: initialProfile.dormBuilding || '',
         dormRoom: initialProfile.dormRoom || ''
       });
     }
@@ -152,17 +155,32 @@ export default function SettingsModal({
                   placeholder="未填写电话"
                 />
               </div>
-              {initialProfile.role === 'student' && (
+              {initialProfile.role === 'user' && (
                 <>
                   <div>
-                    <label className="block text-xs font-semibold text-muted-foreground mb-1">学号</label>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">学号/工号</label>
                     <input
                       type="text"
-                      value={profileForm.studentId}
-                      onChange={(e) => setProfileForm(p => ({ ...p, studentId: e.target.value }))}
+                      value={profileForm.userId}
+                      onChange={(e) => setProfileForm(p => ({ ...p, userId: e.target.value }))}
                       className="w-full px-3.5 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition pr-10"
-                      placeholder="未填写学号"
+                      placeholder="未填写学号/工号"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">楼栋</label>
+                    <select
+                      value={profileForm.dormBuilding}
+                      onChange={(e) => setProfileForm(p => ({ ...p, dormBuilding: e.target.value }))}
+                      className="w-full px-3.5 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition"
+                    >
+                      <option value="">请选择楼栋</option>
+                      {DORM_BUILDING_GROUPS.map((group) => (
+                        <optgroup key={group.group} label={group.group}>
+                          {group.options.map((building) => <option key={building} value={building}>{building}</option>)}
+                        </optgroup>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-muted-foreground mb-1">宿舍号</label>
