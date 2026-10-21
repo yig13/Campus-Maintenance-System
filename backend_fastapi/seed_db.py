@@ -147,8 +147,6 @@ def seed():
         admin_note = None
         if status in ("waiting", "ready", "in_progress", "pending_evaluation", "closed"):
             assigned_to = random.choice(repairman_ids)
-            repairman_idx = repairman_ids.index(assigned_to)
-            admin_note = f"[系统派单] 根据技能匹配与空闲度，自动分配给：{repairmen_data[repairman_idx][0]}"
 
         work_note = random.choice(work_notes) if status in ("pending_evaluation", "closed") else None
 
@@ -190,7 +188,7 @@ def seed():
     notif_count = 0
     notif_tpls = [
         ("报修状态已更新", "您的报修申请状态已更新为: 维修中", "repair_status"),
-        ("新报修任务分配", "您有一个新的报修任务被自动分配", "repair_assigned"),
+        ("新报修任务分配", "您有一个新的报修任务被分配", "repair_assigned"),
         ("⏳ 任务即将超期", "您的任务即将超时请尽快处理！", "sla_warning"),
     ]
     for uid in user_ids + repairman_ids:

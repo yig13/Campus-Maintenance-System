@@ -148,7 +148,7 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
     repair_id = str(uuid.uuid4())
     now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
 
-    # 响应 SLA 截止时间（独立于系统派单等待时限）
+    # 响应 SLA 截止时间
     sla_hours = {"urgent": 2, "high": 6, "normal": 24, "low": 48}
     hours = sla_hours.get(payload.priority, 24)
     sla_due_date = (datetime.now(timezone.utc) + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -166,12 +166,6 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
             (repair_id, user_id, building, room, payload.category,
              payload.description, payload.imageUrl, status, payload.priority, assigned_to, admin_note, sla_due_date, 0, now, now),
         )
-
-        if assigned_to:
-            conn.execute(
-                "INSERT INTO notifications (id, userId, title, message, type, relatedId, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (str(uuid.uuid4()), assigned_to, "新报修任务分配", "您有一个新的报修任务被自动分配", "repair_assigned", repair_id, 0, now)
-            )
 
         conn.commit()
 
@@ -341,8 +335,6 @@ async def update_repair_status(repair_id: str, payload: UpdateRepairStatus, curr
                 "INSERT INTO notifications (id, userId, title, message, type, relatedId, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (str(uuid.uuid4()), existing["assignedTo"], "工单分配已变更", "管理员已调整该工单的维修员分配", "repair_assigned", repair_id, 0, now_time)
             )
-
-        # 工单字段、物料扣减和通知作为同一事务提交，避免部分写入。
         conn.commit()
     finally:
         conn.close()

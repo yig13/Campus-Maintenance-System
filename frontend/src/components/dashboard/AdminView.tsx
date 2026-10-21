@@ -316,9 +316,6 @@ export default function AdminView({ token }: { token: string | null }) {
                         <span className="font-semibold text-foreground">{r.dormBuilding}{r.dormRoom ? ` ${r.dormRoom}` : ''}</span>
                         <Badge label={tCat(r.category, t)} colorClass="bg-gray-100 text-gray-700" />
                         <Badge label={tPriority(r.priority, t)} colorClass={PRIORITY_COLOR[r.priority]} />
-                        {r.adminNote?.startsWith('[系统派单]') && (
-                          <Badge label={t('dispatchBadge') || '🤖 智能派单'} colorClass="bg-blue-100 text-blue-800 border-blue-200" />
-                        )}
                       </div>
                       <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{r.description}</p>
                       {r.userName && <p className="text-xs text-muted-foreground mt-1">{language === 'zh' ? `报修用户：${r.userName}` : `User: ${r.userName}`}</p>}

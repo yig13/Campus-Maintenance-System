@@ -103,7 +103,6 @@ export const translations = {
     uploadPhoto: '上传故障照片',
     photoTip: '支持 png, jpg, jpeg 格式，大小不超过 5MB',
     describePlaceholder: '请详细描述故障情况，最多可输入100字。',
-    dispatchBadge: '系统派单',
 
     // Admin View
     repairList: '报修申请列表',
@@ -245,7 +244,6 @@ export const translations = {
     uploadPhoto: 'Upload Photo',
     photoTip: 'Supports png, jpg, jpeg formats, up to 5MB',
     describePlaceholder: 'Please describe the issue in detail (max 100 characters).',
-    dispatchBadge: 'System dispatched',
 
     // Admin View
     repairList: 'Repairs List',

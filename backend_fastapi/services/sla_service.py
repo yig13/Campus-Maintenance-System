@@ -3,79 +3,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from database import get_db
-from repair_taxonomy import CATEGORY_TO_SKILL
-
-
-AUTO_DISPATCH_WAIT_HOURS = {"urgent": 1, "high": 2, "normal": 4, "low": 8}
-
-
-def dispatch_unaccepted_repairs(conn, now_utc: datetime, now_str: str):
-    """派发等待超过优先级时限、仍未分配维修员的工单。"""
-    waiting_repairs = conn.execute("""
-        SELECT id, studentId, dormBuilding, dormRoom, category, priority, adminNote, updatedAt
-        FROM repairs
-        WHERE status = 'waiting' AND assignedTo IS NULL
-    """).fetchall()
-    if not waiting_repairs:
-        return
-
-    repairmen = conn.execute(
-        "SELECT id, name, skills FROM users WHERE role = 'repairman'"
-    ).fetchall()
-    for repair in waiting_repairs:
-        try:
-            waiting_since = datetime.fromisoformat(repair["updatedAt"].replace("Z", "+00:00"))
-            if waiting_since.tzinfo is None:
-                waiting_since = waiting_since.replace(tzinfo=timezone.utc)
-        except (ValueError, AttributeError):
-            print(f"[Auto Dispatch] Invalid createdAt for repair {repair['id']}")
-            continue
-
-        wait_hours = AUTO_DISPATCH_WAIT_HOURS.get(repair["priority"], 4)
-        if (now_utc - waiting_since).total_seconds() < wait_hours * 3600:
-            continue
-
-        skill_group = CATEGORY_TO_SKILL.get(repair["category"])
-        candidates = []
-        for repairman in repairmen:
-            skills = [skill.strip() for skill in (repairman["skills"] or "").split(",")]
-            if not skill_group or skill_group not in skills:
-                continue
-            active_count = conn.execute(
-                "SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status IN ('waiting', 'ready', 'in_progress')",
-                (repairman["id"],),
-            ).fetchone()[0]
-            if active_count < 5:
-                candidates.append((active_count, repairman["name"], repairman["id"]))
-
-        if not candidates:
-            # 保持未分配状态，下轮轮询继续尝试，避免无技能或满载时误派。
-            continue
-
-        active_count, name, repairman_id = min(candidates, key=lambda item: (item[0], item[1]))
-        note = f"[系统派单] 超过{wait_hours}小时无人接单，技能匹配+负载均衡（当前 {active_count} 单），自动分配给：{name}"
-        if repair["adminNote"]:
-            note = f"{note}\n{repair['adminNote']}"
-
-        # 条件更新可防止管理员同时手动分配时覆盖其操作。
-        updated = conn.execute(
-            "UPDATE repairs SET assignedTo = ?, adminNote = ?, updatedAt = ? WHERE id = ? AND status = 'waiting' AND assignedTo IS NULL",
-            (repairman_id, note, now_str, repair["id"]),
-        )
-        if updated.rowcount == 0:
-            continue
-
-        conn.execute(
-            "INSERT INTO notifications (id, userId, title, message, type, relatedId, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (str(uuid.uuid4()), repairman_id, "新报修任务分配", f"工单（{repair['dormBuilding']} {repair['dormRoom']}）已由系统自动派单，请及时处理。", "repair_assigned", repair["id"], 0, now_str),
-        )
-        conn.execute(
-            "INSERT INTO notifications (id, userId, title, message, type, relatedId, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (str(uuid.uuid4()), repair["studentId"], "报修工单已自动派单", f"您的工单（{repair['dormBuilding']} {repair['dormRoom']}）已分配给维修员：{name}。", "repair_assigned", repair["id"], 0, now_str),
-        )
-        print(f"[Auto Dispatch] Repair {repair['id']} assigned to {name} after {wait_hours} hours.")
-
-
 def close_unrated_repairs(conn, now_utc: datetime, now_str: str):
     """24小时未评价的工单自动记5星并结案。"""
     pending = conn.execute("""
@@ -126,7 +53,6 @@ async def check_sla_compliance():
         now_utc = datetime.now(timezone.utc)
         now_str = now_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-        dispatch_unaccepted_repairs(conn, now_utc, now_str)
         close_unrated_repairs(conn, now_utc, now_str)
         conn.commit()
 
