@@ -5,13 +5,14 @@ import io
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from database import get_db, VALID_STATUSES, STATUS_LABELS
 from auth import verify_token, require_admin
 from models import CreateRepairRequest, UpdateRepairStatus, EvaluateRequest
 from repair_taxonomy import DORM_BUILDINGS, DORM_APARTMENT_BUILDINGS, VALID_CATEGORIES
+from phone_crypto import decrypt_phone
 
 router = APIRouter()
 
@@ -28,11 +29,13 @@ def _mask_phone(phone: Optional[str]) -> str:
 
 @router.get("/api/repairs")
 async def get_repairs(
-    page: Optional[int] = None,
-    pageSize: Optional[int] = None,
+    page: Optional[int] = Query(default=None, ge=1),
+    pageSize: Optional[int] = Query(default=None, ge=1, le=100),
     status: Optional[str] = None,
     current_user: dict = Depends(verify_token)
 ):
+    if (page is None) != (pageSize is None):
+        raise HTTPException(status_code=400, detail="page 和 pageSize 必须同时提供")
     conn = get_db()
     role = current_user.get("role", "user")
     user_id = current_user.get("userId", "")
@@ -100,7 +103,7 @@ async def get_repairs(
 
     data = [dict(r) for r in rows]
     for repair in data:
-        phone = repair.pop("userPhone", None)
+        phone = decrypt_phone(repair.pop("userPhone", None))
         # 联系电话仅返回给该工单的维修人员。待接单时脱敏；
         # 维修人员开始处理后显示完整号码，便于联系预约上门。
         if role == "repairman":
@@ -132,26 +135,27 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
     if payload.category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail="报修类型无效")
 
-    if payload.priority not in ("low", "normal", "high", "urgent"):
-        raise HTTPException(status_code=400, detail="优先级无效")
+    image_urls = [url for url in (payload.imageUrl or "").split(",") if url.strip()]
+    if len(image_urls) > 3:
+        raise HTTPException(status_code=400, detail="故障照片最多上传3张")
 
     if payload.dormBuilding.strip() not in DORM_BUILDINGS:
         raise HTTPException(status_code=400, detail="楼栋无效")
 
     building = payload.dormBuilding.strip()
+    floor = payload.dormFloor
     room = payload.dormRoom.strip()
-    if not building or (building in DORM_APARTMENT_BUILDINGS and not room) or not payload.description.strip():
+    if not building or (building in DORM_APARTMENT_BUILDINGS and (floor is None or not room)) or not payload.description.strip():
         raise HTTPException(status_code=400, detail="请填写所有必填项")
-    if len(payload.description) > 100:
-        raise HTTPException(status_code=400, detail="故障详情最多可输入100字")
+    if len(payload.description) > 50:
+        raise HTTPException(status_code=400, detail="故障详情最多可输入50字")
 
     repair_id = str(uuid.uuid4())
     now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
 
-    # 响应 SLA 截止时间
-    sla_hours = {"urgent": 2, "high": 6, "normal": 24, "low": 48}
-    hours = sla_hours.get(payload.priority, 24)
-    sla_due_date = (datetime.now(timezone.utc) + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    # 用户提交的工单统一按普通优先级计算响应 SLA；优先级由管理员调整。
+    priority = "normal"
+    sla_due_date = (datetime.now(timezone.utc) + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
     conn = get_db()
     try:
@@ -161,10 +165,10 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
 
         conn.execute(
             """INSERT INTO repairs
-               (id, studentId, dormBuilding, dormRoom, category, description, imageUrl, status, priority, assignedTo, adminNote, slaDueDate, slaBreached, createdAt, updatedAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (repair_id, user_id, building, room, payload.category,
-             payload.description, payload.imageUrl, status, payload.priority, assigned_to, admin_note, sla_due_date, 0, now, now),
+               (id, studentId, dormBuilding, dormFloor, dormRoom, category, description, imageUrl, status, priority, assignedTo, adminNote, slaDueDate, slaBreached, createdAt, updatedAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (repair_id, user_id, building, floor, room, payload.category,
+             payload.description, payload.imageUrl, status, priority, assigned_to, admin_note, sla_due_date, 0, now, now),
         )
 
         conn.commit()
@@ -409,7 +413,7 @@ async def export_repairs(current_user: dict = Depends(require_admin)):
     conn = get_db()
     try:
         rows = conn.execute("""
-            SELECT r.id, u.name as userName, r.dormBuilding, r.dormRoom,
+            SELECT r.id, u.name as userName, r.dormBuilding, r.dormFloor, r.dormRoom,
                    r.category, r.status, r.priority, t.name as assignedToName,
                    r.createdAt, r.updatedAt
             FROM repairs r
@@ -423,13 +427,13 @@ async def export_repairs(current_user: dict = Depends(require_admin)):
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Repair ID", "User Name", "Building", "Room", "Category",
+        "Repair ID", "User Name", "Building", "Floor", "Room", "Category",
         "Status", "Priority", "Assigned Repairman", "Created At", "Updated At"
     ])
 
     for row in rows:
         writer.writerow([
-            row["id"], row["userName"], row["dormBuilding"], row["dormRoom"],
+            row["id"], row["userName"], row["dormBuilding"], row["dormFloor"], row["dormRoom"],
             row["category"], row["status"], row["priority"], row["assignedToName"],
             row["createdAt"], row["updatedAt"]
         ])

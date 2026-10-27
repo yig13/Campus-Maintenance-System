@@ -5,10 +5,10 @@ frontend/*.tsbuildinfo
 
 # Python 环境与缓存
 .venv/
-backend_fastapi/__pycache__/
+**/__pycache__/
+*.py[cod]
 backend_fastapi/venv/
 backend_fastapi/.venv/
-backend_fastapi/*.pyc
 backend_fastapi/*.db
 backend_fastapi/uploads/
 

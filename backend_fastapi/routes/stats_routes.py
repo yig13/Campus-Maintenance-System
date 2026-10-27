@@ -3,50 +3,29 @@ import time
 from fastapi import APIRouter, Depends
 
 from database import get_db
-from auth import verify_token
+from auth import require_admin
 
 router = APIRouter()
 
 
 @router.get("/api/stats")
-async def get_stats(current_user: dict = Depends(verify_token)):
-    role = current_user.get("role", "user")
-    user_id = current_user.get("userId", "")
-
+async def get_stats(_current_user: dict = Depends(require_admin)):
     conn = get_db()
 
     try:
-        if role == "admin":
-            total = conn.execute("SELECT COUNT(*) FROM repairs").fetchone()[0]
-            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'waiting'").fetchone()[0]
-            in_progress = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'in_progress'").fetchone()[0]
-            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE status IN ('pending_evaluation', 'closed')").fetchone()[0]
-            rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'rejected'").fetchone()[0]
-            category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs GROUP BY category").fetchall()
-            building_rows = conn.execute(
-                """SELECT dormBuilding as building, COUNT(*) as count
-                   FROM repairs
-                   WHERE TRIM(COALESCE(dormBuilding, '')) != ''
-                   GROUP BY dormBuilding
-                   ORDER BY count DESC, dormBuilding ASC"""
-            ).fetchall()
-        elif role == "repairman":
-            total = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ?", (user_id,)).fetchone()[0]
-            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'waiting'", (user_id,)).fetchone()[0]
-            in_progress = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'in_progress'", (user_id,)).fetchone()[0]
-            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status IN ('pending_evaluation', 'closed')", (user_id,)).fetchone()[0]
-            rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status = 'rejected'", (user_id,)).fetchone()[0]
-            category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs WHERE assignedTo = ? GROUP BY category", (user_id,)).fetchall()
-            building_rows = []
-        else:
-            total = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ?", (user_id,)).fetchone()[0]
-            pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'waiting'", (user_id,)).fetchone()[0]
-            in_progress = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'in_progress'", (user_id,)).fetchone()[0]
-            completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status IN ('pending_evaluation', 'closed')", (user_id,)).fetchone()[0]
-            rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE studentId = ? AND status = 'rejected'", (user_id,)).fetchone()[0]
-            category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs WHERE studentId = ? GROUP BY category", (user_id,)).fetchall()
-            building_rows = []
-
+        total = conn.execute("SELECT COUNT(*) FROM repairs").fetchone()[0]
+        pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'waiting'").fetchone()[0]
+        in_progress = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'in_progress'").fetchone()[0]
+        completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE status IN ('pending_evaluation', 'closed')").fetchone()[0]
+        rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'rejected'").fetchone()[0]
+        category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs GROUP BY category").fetchall()
+        building_rows = conn.execute(
+            """SELECT dormBuilding as building, COUNT(*) as count
+               FROM repairs
+               WHERE TRIM(COALESCE(dormBuilding, '')) != ''
+               GROUP BY dormBuilding
+               ORDER BY count DESC, dormBuilding ASC"""
+        ).fetchall()
         total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         user_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'user'").fetchone()[0]
         repairman_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'repairman'").fetchone()[0]

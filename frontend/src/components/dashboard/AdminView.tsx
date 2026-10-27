@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { formatRepairLocation } from '../../lib/repairLocation';
 import { useAuth } from '../../contexts/AuthContext';
 import { translations } from '../../lib/i18n';
 import { RepairRequest, User, Stats, ApiResponse, PaginatedApiResponse } from '../../types';
@@ -188,7 +189,7 @@ export default function AdminView({ token }: { token: string | null }) {
         method: 'POST',
         body: JSON.stringify(createAdminForm),
       });
-      const data = await res.json() as ApiResponse<any>;
+      const data = await res.json() as ApiResponse<{ id: string; name: string; userId: string; role: 'admin' }>;
       if (data.success) {
         toast.success('管理员创建成功');
         setCreateAdminOpen(false);
@@ -215,7 +216,7 @@ export default function AdminView({ token }: { token: string | null }) {
         method: 'POST',
         body: JSON.stringify(createRepairmanForm),
       });
-      const data = await res.json() as ApiResponse<any>;
+      const data = await res.json() as ApiResponse<{ id: string; name: string; userId: string; role: 'repairman'; skills: string }>;
       if (data.success) {
         toast.success('维修员创建成功');
         setCreateRepairmanOpen(false);
@@ -313,7 +314,7 @@ export default function AdminView({ token }: { token: string | null }) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetailTarget(r)}>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-foreground">{r.dormBuilding}{r.dormRoom ? ` ${r.dormRoom}` : ''}</span>
+                        <span className="font-semibold text-foreground">{formatRepairLocation(r.dormBuilding, r.dormFloor, r.dormRoom)}</span>
                         <Badge label={tCat(r.category, t)} colorClass="bg-gray-100 text-gray-700" />
                         <Badge label={tPriority(r.priority, t)} colorClass={PRIORITY_COLOR[r.priority]} />
                       </div>

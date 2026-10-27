@@ -193,14 +193,20 @@ python -m venv ../.venv
 source ../.venv/bin/activate   # Windows: ..\.venv\Scripts\activate
 pip install -r requirements.txt
 
-# 2. 启动后端
+# 2. 配置手机号加密密钥
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# 将生成结果写入项目根目录 .env 的 PHONE_ENCRYPTION_KEY，之后始终使用同一密钥
+
+# 3. 启动后端
 python -m uvicorn main:app --reload --port 8000
 
-# 3. 新终端，安装并启动前端
+# 4. 新终端，安装并启动前端
 cd frontend
 npm install
 npm run dev
 ```
+
+后端首次启动会自动将数据库中已有的明文手机号加密。密钥丢失或更换后，已存储的手机号将无法解密；部署前请备份数据库并妥善保存密钥。
 
 ### 生成测试数据
 
@@ -218,6 +224,15 @@ python seed_db.py
 | 用户 | 20230101 | 123456 |
 | 维修员（水电） | tech_li@qq.com | 123456 |
 | 维修员（电器+家具） | tech_wang@qq.com | 123456 |
+
+### 初始化生产数据
+
+生产环境使用 `backend_fastapi/produce_seed.py`，只创建配置的管理员账号并补齐标准公告，不生成模拟用户、维修员、工单、评价或库存数据。运行前请在根目录 `.env` 中设置 `PHONE_ENCRYPTION_KEY`、`SEED_ADMIN_PASSWORD` 和 `SEED_ADMIN_PHONE`；已有管理员不会被重置，已存在的标准公告也不会重复添加。
+
+```bash
+cd backend_fastapi
+python produce_seed.py
+```
 
 ### 访问地址
 

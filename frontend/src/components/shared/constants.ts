@@ -64,7 +64,7 @@ export const FAULT_CATEGORY_GROUPS: { group: string; options: FaultCategoryOptio
   },
   {
     group: '其他类',
-    options: [{ value: 'office' }],
+    options: [{ value: 'office' }, { value: 'other_item' }],
   },
 ];
 export const CATEGORY_DISPLAY_GROUP: Record<string, 'general' | 'hotWater' | 'appliance' | 'other'> = {
@@ -79,6 +79,7 @@ export const CATEGORY_DISPLAY_GROUP: Record<string, 'general' | 'hotWater' | 'ap
   heat_pump: 'hotWater', shower: 'hotWater',
   washer: 'appliance', ac: 'appliance',
   office: 'other',
+  other_item: 'other',
   // 历史大类工单的兼容映射
   water: 'hotWater', electricity: 'appliance', furniture: 'general',
   network: 'other', other: 'other',
@@ -91,6 +92,7 @@ export const CATEGORY_TO_SKILL: Record<string, string> = {
   ceiling: 'furniture', floor_tile: 'furniture', wall: 'furniture', door_frame: 'furniture',
   glass_window: 'furniture', curtain: 'furniture', screen_window: 'furniture', drying_rack: 'furniture',
   office: 'other',
+  other_item: 'other',
 };
 export const REPAIRMAN_SKILL_OPTIONS = ['furniture', 'water', 'electricity', 'other'] as const;
 export const CATEGORY_LABEL: Record<string, string> = {

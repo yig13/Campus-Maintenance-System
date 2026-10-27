@@ -1,10 +1,14 @@
 import sqlite3
 import uuid
-import time
 import random
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
+from dotenv import load_dotenv
 from repair_taxonomy import DORM_BUILDINGS, DORM_APARTMENT_BUILDINGS
+from phone_crypto import encrypt_phone
+from database import init_db
+
+load_dotenv()
 
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
@@ -25,6 +29,7 @@ def rid():
 
 
 def seed():
+    init_db()
     conn = sqlite3.connect("dorm.db")
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -38,7 +43,7 @@ def seed():
         return
 
     # ========== 基础账号 ==========
-    print("👤 Creating accounts...")
+    print("Creating accounts...")
     accounts = [
         ("管理员", "admin123", "admin", "admin001", None, None, "13800000000", None),
         ("用户测试", "user123", "user", "20230001", "公寓2栋", "1-302", "13800000001", None),
@@ -50,7 +55,7 @@ def seed():
     for name, pw, role, sid, building, room, phone, skills in accounts:
         cursor.execute(
             "INSERT INTO users (id,name,password,role,studentId,dormBuilding,dormRoom,phone,skills,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (rid(), name, pwd_context.hash(pw), role, sid, building, room, phone, skills, now)
+            (rid(), name, pwd_context.hash(pw), role, sid, building, room, encrypt_phone(phone), skills, now)
         )
 
     # ========== 模拟用户 ==========
@@ -88,7 +93,7 @@ def seed():
     print(f"  {len(users_data)} users + {len(repairmen_data)} repairmen created")
 
     # ========== 报修工单 ==========
-    print("🔧 Creating repair tickets...")
+    print("Creating repair tickets...")
     templates = [
         ("sink", "high", ["洗手池下方软管接口漏水，地面持续积水", "洗漱台排水缓慢，检查后发现下水管渗漏"]),
         ("cold_faucet", "normal", ["公共区域冷水龙头关不严，持续滴水", "洗手池冷水龙头开关松动，出水不稳定"]),
@@ -126,6 +131,7 @@ def seed():
         desc = random.choice(descs)
         user_id = random.choice(user_ids)
         building = random.choice(DORM_BUILDINGS)
+        floor = random.randint(1, 10) if building in DORM_APARTMENT_BUILDINGS else None
         room_num = str(random.randint(101, 608)) if building in DORM_APARTMENT_BUILDINGS else ""
         created_dt = random_dt(2, 25)
         created = now_str(created_dt)
@@ -166,16 +172,16 @@ def seed():
         repair_id = rid()
         repair_ids.append(repair_id)
         cursor.execute("""INSERT INTO repairs
-            (id,studentId,dormBuilding,dormRoom,category,description,imageUrl,status,priority,
+            (id,studentId,dormBuilding,dormFloor,dormRoom,category,description,imageUrl,status,priority,
              assignedTo,adminNote,workNote,rating,slaDueDate,slaBreached, createdAt,updatedAt)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (repair_id, user_id, building, room_num, cat, desc, None, status, pri,
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (repair_id, user_id, building, floor, room_num, cat, desc, None, status, pri,
              assigned_to, admin_note, work_note, rating, sla_due, sla_breached, created, now_str(updated_dt)))
 
     print(f"  {len(repair_ids)} repair tickets created")
 
     # ========== 评价 ==========
-    print("⭐ Creating reviews...")
+    print("Creating reviews...")
     review_count = 0
     for rid_ in random.sample(repair_ids, min(12, len(repair_ids))):
         cursor.execute("INSERT INTO reviews (id,requestId,studentId,rating,createdAt) VALUES (?,?,?,?,?)",
@@ -184,7 +190,7 @@ def seed():
     print(f"  {review_count} reviews created")
 
     # ========== 通知 ==========
-    print("🔔 Creating notifications...")
+    print("Creating notifications...")
     notif_count = 0
     notif_tpls = [
         ("报修状态已更新", "您的报修申请状态已更新为: 维修中", "repair_status"),
@@ -200,7 +206,7 @@ def seed():
     print(f"  {notif_count} notifications created")
 
     # ========== 公告 ==========
-    print("📢 Creating announcements...")
+    print("Creating announcements...")
     anns = [
         ("请遵守国家法律法规，禁止提交含有人身攻击、侮辱、诽谤、骚扰、侵害他人隐私、猥亵、淫秽色情、反动言论、虚假信息、有害内容或胁迫性文字的工单。"),
         ("报修工单用于受理公寓寝室内各类设施、设备的故障报修问题，处理范围包括：水电、门窗、锁具、家具、家电等问题。网络故障不属于报修工单处理范围。"),
@@ -214,7 +220,7 @@ def seed():
     print(f"  {len(anns)} announcements created")
 
     # ========== 配件 ==========
-    print("🔩 Creating parts inventory...")
+    print("Creating parts inventory...")
     parts_data = [
         ("水管密封圈", 5.5, 150), ("LED灯泡", 12.0, 200), ("电源插座面板", 25.0, 80),
         ("门锁芯", 45.0, 30), ("合页（一对）", 18.0, 60), ("网线（1米）", 3.0, 500),
@@ -242,7 +248,7 @@ def seed():
 
     conn.commit()
     conn.close()
-    print("\n✅ All seed data generated successfully!")
+    print("\nAll seed data generated successfully!")
     print("\nTest accounts:")
     print("  Admin:     admin001 / admin123")
     print("  User:      20230001 / user123")

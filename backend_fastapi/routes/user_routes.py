@@ -3,13 +3,14 @@ import uuid
 import time
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
 from fastapi.responses import JSONResponse
 
 from database import get_db, UPLOAD_DIR
 from auth import verify_token, require_admin, pwd_context
 from models import UpdateProfileRequest, ChangePasswordRequest, UpdateSkillsRequest, CreateAdminRequest, CreateRepairmanRequest
 from repair_taxonomy import DORM_BUILDINGS, VALID_REPAIRMAN_SKILLS
+from phone_crypto import encrypt_phone, decrypt_phone
 
 router = APIRouter()
 
@@ -38,11 +39,13 @@ async def update_user_skills(user_id: str, payload: UpdateSkillsRequest, current
 
 @router.get("/api/users")
 async def get_users(
-    page: Optional[int] = None,
-    pageSize: Optional[int] = None,
+    page: Optional[int] = Query(default=None, ge=1),
+    pageSize: Optional[int] = Query(default=None, ge=1, le=100),
     role: Optional[str] = None,
     current_user: dict = Depends(require_admin)
 ):
+    if (page is None) != (pageSize is None):
+        raise HTTPException(status_code=400, detail="page 和 pageSize 必须同时提供")
     conn = get_db()
     try:
         conditions = []
@@ -66,6 +69,7 @@ async def get_users(
 
     data = [dict(r) for r in rows]
     for user in data:
+        user["phone"] = decrypt_phone(user.get("phone"))
         if user.get("role") == "repairman":
             user["skills"] = _normalize_skills(user.get("skills") or "")
     if page is not None and pageSize is not None:
@@ -102,6 +106,16 @@ async def delete_user(user_id: str, current_user: dict = Depends(require_admin))
         raise HTTPException(status_code=400, detail="不能删除当前登录的管理员账号")
     conn = get_db()
     try:
+        user = conn.execute("SELECT id, role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        if user["role"] == "repairman":
+            active_tasks = conn.execute(
+                "SELECT COUNT(*) FROM repairs WHERE assignedTo = ? AND status IN ('waiting', 'ready', 'in_progress')",
+                (user_id,),
+            ).fetchone()[0]
+            if active_tasks:
+                raise HTTPException(status_code=400, detail="该维修员仍有未完成工单，请先重新分配或释放工单")
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
     finally:
@@ -123,20 +137,33 @@ async def get_current_user(current_user: dict = Depends(verify_token)):
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     user_data = dict(user)
+    user_data["phone"] = decrypt_phone(user_data.get("phone"))
     return {"success": True, "data": user_data}
 
 
 @router.post("/api/upload")
 async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(verify_token)):
     allowed_extensions = {".png", ".jpg", ".jpeg", ".gif"}
-    _, ext = os.path.splitext(file.filename)
-    if ext.lower() not in allowed_extensions:
+    _, ext = os.path.splitext(file.filename or "")
+    ext = ext.lower()
+    if ext not in allowed_extensions:
         raise HTTPException(status_code=400, detail="只允许上传图片格式 (.png, .jpg, .jpeg, .gif)")
 
-    max_size = 5 * 1024 * 1024
-    content = await file.read()
-    if len(content) > max_size:
-        raise HTTPException(status_code=400, detail="图片大小不能超过 5MB")
+    max_size = 1024 * 1024 - 1
+    content = bytearray()
+    while chunk := await file.read(64 * 1024):
+        content.extend(chunk)
+        if len(content) > max_size:
+            raise HTTPException(status_code=413, detail="图片必须小于1MB")
+
+    image_signatures = {
+        ".png": (b"\x89PNG\r\n\x1a\n",),
+        ".jpg": (b"\xff\xd8\xff",),
+        ".jpeg": (b"\xff\xd8\xff",),
+        ".gif": (b"GIF87a", b"GIF89a"),
+    }
+    if not any(content.startswith(signature) for signature in image_signatures[ext]):
+        raise HTTPException(status_code=400, detail="文件内容与图片格式不符")
 
     filename = f"{uuid.uuid4()}{ext.lower()}"
     file_path = os.path.join(UPLOAD_DIR, filename)
@@ -171,12 +198,21 @@ async def update_profile(payload: UpdateProfileRequest, current_user: dict = Dep
 
         if payload.phone is not None:
             updates.append("phone = ?")
-            values.append(payload.phone)
+            values.append(encrypt_phone(payload.phone))
 
         if user["role"] == "user":
             if payload.userId is not None:
+                student_id = payload.userId.strip()
+                if not student_id:
+                    raise HTTPException(status_code=400, detail="学号/工号不能为空")
+                duplicate = conn.execute(
+                    "SELECT id FROM users WHERE studentId = ? AND id != ?",
+                    (student_id, user_id),
+                ).fetchone()
+                if duplicate:
+                    raise HTTPException(status_code=400, detail="该学号/工号已被其他账号使用")
                 updates.append("studentId = ?")
-                values.append(payload.userId)
+                values.append(student_id)
             if payload.dormBuilding is not None:
                 if payload.dormBuilding not in DORM_BUILDINGS:
                     raise HTTPException(status_code=400, detail="楼栋选择无效")
@@ -207,6 +243,7 @@ async def update_profile(payload: UpdateProfileRequest, current_user: dict = Dep
 
     print(f"[/api/users/profile] User profile updated: {user_id}")
     updated_data = dict(updated_user)
+    updated_data["phone"] = decrypt_phone(updated_data.get("phone"))
     return {"success": True, "data": updated_data}
 
 
@@ -258,7 +295,7 @@ async def create_admin(payload: CreateAdminRequest, current_user: dict = Depends
         hashed_password = pwd_context.hash(payload.password)
         conn.execute(
             "INSERT INTO users (id, name, password, role, studentId, phone, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, name, hashed_password, "admin", user_id_value, phone, now),
+            (user_id, name, hashed_password, "admin", user_id_value, encrypt_phone(phone), now),
         )
         conn.commit()
     finally:
@@ -294,7 +331,7 @@ async def create_repairman(payload: CreateRepairmanRequest, current_user: dict =
         hashed_password = pwd_context.hash(payload.password)
         conn.execute(
             "INSERT INTO users (id, name, password, role, studentId, dormBuilding, skills, phone, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, name, hashed_password, "repairman", student_id, building or None, _normalize_skills(payload.skills), phone, now),
+            (user_id, name, hashed_password, "repairman", student_id, building or None, _normalize_skills(payload.skills), encrypt_phone(phone), now),
         )
         conn.commit()
     finally:

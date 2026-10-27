@@ -87,6 +87,20 @@ async def delete_part(part_id: str, current_user: dict = Depends(require_admin))
 async def get_repair_parts(repair_id: str, current_user: dict = Depends(verify_token)):
     conn = get_db()
     try:
+        repair = conn.execute(
+            "SELECT studentId, assignedTo FROM repairs WHERE id = ?", (repair_id,)
+        ).fetchone()
+        if not repair:
+            raise HTTPException(status_code=404, detail="报修记录不存在")
+
+        role = current_user.get("role")
+        user_id = current_user.get("userId", "")
+        if role != "admin" and not (
+            (role == "user" and repair["studentId"] == user_id)
+            or (role == "repairman" and repair["assignedTo"] == user_id)
+        ):
+            raise HTTPException(status_code=403, detail="无权查看该工单的物料记录")
+
         rows = conn.execute("""
             SELECT rp.*, p.name as partName
             FROM repair_parts rp

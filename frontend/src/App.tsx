@@ -1,9 +1,10 @@
+import { lazy, Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Index from './pages/Index';
-import Login from './components/custom/Login';
-import Signup from './components/custom/Signup';
+const Index = lazy(() => import('./pages/Index'));
+const Login = lazy(() => import('./components/custom/Login'));
+const Signup = lazy(() => import('./components/custom/Signup'));
 
 import { LanguageProvider } from './contexts/LanguageContext';
 
@@ -51,7 +52,9 @@ export default function App() {
     <HashRouter>
       <AuthProvider>
         <LanguageProvider>
-          <AppRoutes />
+          <Suspense fallback={<div className="min-h-screen bg-background" />}>
+            <AppRoutes />
+          </Suspense>
           <Toaster position="top-right" richColors />
         </LanguageProvider>
       </AuthProvider>

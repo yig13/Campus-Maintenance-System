@@ -14,6 +14,7 @@ export interface User {
 export interface RepairRequest {
   id: string;
   dormBuilding: string;
+  dormFloor?: number | null;
   dormRoom: string;
   category: string;
   description: string;
@@ -29,30 +30,8 @@ export interface RepairRequest {
   userPhone?: string;
   assignedToName?: string;
   rating?: number;
-  feedbackTags?: string;
-  feedbackText?: string;
   slaDueDate?: string;
   slaBreached?: number;
-}
-
-export interface RepairTask {
-  id: string;
-  requestId: string;
-  repairmanId: string;
-  status: 'assigned' | 'in_progress' | 'completed';
-  workNote?: string;
-  startedAt?: string;
-  completedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-  // Joined fields
-  dormBuilding?: string;
-  dormRoom?: string;
-  category?: string;
-  description?: string;
-  priority?: string;
-  requestStatus?: string;
-  userName?: string;
 }
 
 export interface Stats {

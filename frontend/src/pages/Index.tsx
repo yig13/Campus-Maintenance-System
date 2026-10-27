@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { User, ApiResponse } from '../types';
@@ -10,11 +10,12 @@ import {
 import { API, authFetch } from '../lib/api';
 import NotificationsMenu from '../components/custom/NotificationsMenu';
 import AnnouncementsBanner from '../components/custom/AnnouncementsBanner';
-import UserView from '../components/dashboard/UserView';
-import RepairmanView from '../components/dashboard/RepairmanView';
-import AdminView from '../components/dashboard/AdminView';
 import SettingsModal from '../components/dashboard/SettingsModal';
 import { Badge } from '../components/shared/StatusBadge';
+
+const UserView = lazy(() => import('../components/dashboard/UserView'));
+const RepairmanView = lazy(() => import('../components/dashboard/RepairmanView'));
+const AdminView = lazy(() => import('../components/dashboard/AdminView'));
 
 export default function Index() {
   const { user, token, logout } = useAuth();
@@ -142,9 +143,11 @@ export default function Index() {
         </div>
 
         {/* Role-based view */}
-        {user.role === 'user' && <UserView token={token} />}
-        {user.role === 'repairman' && <RepairmanView token={token} />}
-        {user.role === 'admin' && <AdminView token={token} />}
+        <Suspense fallback={<div className="flex justify-center py-16"><RefreshCw className="w-6 h-6 text-muted-foreground animate-spin" /></div>}>
+          {user.role === 'user' && <UserView token={token} />}
+          {user.role === 'repairman' && <RepairmanView token={token} />}
+          {user.role === 'admin' && <AdminView token={token} />}
+        </Suspense>
       </main>
 
       {/* Settings Modal */}

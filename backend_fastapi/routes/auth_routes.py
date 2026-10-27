@@ -8,6 +8,7 @@ from database import get_db
 from auth import pwd_context, create_access_token
 from models import SignupRequest, LoginRequest
 from repair_taxonomy import DORM_BUILDINGS
+from phone_crypto import encrypt_phone, decrypt_phone
 
 router = APIRouter()
 
@@ -41,7 +42,7 @@ async def register(payload: SignupRequest):
         hashed_password = pwd_context.hash(payload.password or "")
         conn.execute(
             "INSERT INTO users (id, name, password, role, studentId, dormBuilding, phone, skills, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, name, hashed_password, role, student_id, building, phone, "", now),
+            (user_id, name, hashed_password, role, student_id, building, encrypt_phone(phone), "", now),
         )
         conn.commit()
     finally:
@@ -84,7 +85,7 @@ async def login(payload: LoginRequest):
             "userId": user["studentId"],
             "dormBuilding": user["dormBuilding"] if "dormBuilding" in user.keys() else None,
             "dormRoom": user["dormRoom"],
-            "phone": user["phone"],
+            "phone": decrypt_phone(user["phone"]),
             "skills": user["skills"] if "skills" in user.keys() else None,
         },
     }

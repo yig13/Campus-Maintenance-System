@@ -17,7 +17,7 @@ if _env_key:
 else:
     # 未设置环境变量时自动生成随机密钥（每次重启后旧 token 全部失效）
     SECRET_KEY = secrets.token_hex(32)
-    print("[auth] ⚠️  未设置 JWT_SECRET 环境变量，已自动生成随机密钥。重启后旧 token 将失效。")
+    print("[auth] WARNING: JWT_SECRET is not set; a random key was generated. Existing tokens will expire after restart.")
 
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES", "1440"))

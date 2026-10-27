@@ -2,6 +2,7 @@ fastapi
 uvicorn
 pydantic
 python-jose[cryptography]
+python-dotenv
 passlib
 python-multipart
 httpx

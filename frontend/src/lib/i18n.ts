@@ -9,6 +9,7 @@ export const translations = {
     username: '姓名',
     role: '身份',
     dormRoom: '宿舍号',
+    floor: '楼层',
     phone: '电话',
     skills: '专业技能',
     save: '保存',
@@ -74,6 +75,7 @@ export const translations = {
     cat_washer: '洗衣机（暂停报修）',
     cat_ac: '空调',
     cat_office: '办公设备',
+    cat_other_item: '其他',
     category_general: '综合类',
     category_hotWater: '热水类',
     category_appliance: '家电类',
@@ -101,8 +103,9 @@ export const translations = {
     faultCategory: '故障分类',
     faultDescription: '故障详情描述',
     uploadPhoto: '上传故障照片',
+    photoUploadHint: '最多上传3张，单张小于1MB',
     photoTip: '支持 png, jpg, jpeg 格式，大小不超过 5MB',
-    describePlaceholder: '请详细描述故障情况，最多可输入100字。',
+    describePlaceholder: '请详细描述故障情况，最多可输入50字。',
 
     // Admin View
     repairList: '报修申请列表',
@@ -151,6 +154,7 @@ export const translations = {
     username: 'Name',
     role: 'Role',
     dormRoom: 'Room No.',
+    floor: 'Floor',
     phone: 'Phone',
     skills: 'Skills',
     save: 'Save',
@@ -215,6 +219,7 @@ export const translations = {
     cat_washer: 'Washing machine (temporarily unavailable)',
     cat_ac: 'Air conditioner',
     cat_office: 'Office equipment',
+    cat_other_item: 'Other',
     category_general: 'General maintenance',
     category_hotWater: 'Hot water',
     category_appliance: 'Appliances',
@@ -242,8 +247,9 @@ export const translations = {
     faultCategory: 'Category',
     faultDescription: 'Description',
     uploadPhoto: 'Upload Photo',
+    photoUploadHint: 'Up to 3 photos, each under 1 MB',
     photoTip: 'Supports png, jpg, jpeg formats, up to 5MB',
-    describePlaceholder: 'Please describe the issue in detail (max 100 characters).',
+    describePlaceholder: 'Please describe the issue in detail (max 50 characters).',
 
     // Admin View
     repairList: 'Repairs List',

@@ -1,7 +1,6 @@
 import os
-import time
-import uuid
 import sqlite3
+from phone_crypto import encrypt_phone, validate_phone_encryption_key
 
 # ─── Paths ─────────────────────────────────────────────────────────────────────
 DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(__file__), "dorm.db"))
@@ -18,6 +17,7 @@ def get_db() -> sqlite3.Connection:
 # ─── Schema Initialization ────────────────────────────────────────────────────
 def init_db():
     """初始化数据库表结构"""
+    validate_phone_encryption_key()
     conn = get_db()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -38,6 +38,7 @@ def init_db():
             id TEXT PRIMARY KEY,
             studentId TEXT NOT NULL,
             dormBuilding TEXT NOT NULL,
+            dormFloor INTEGER,
             dormRoom TEXT NOT NULL,
             category TEXT NOT NULL,
             description TEXT NOT NULL,
@@ -105,9 +106,38 @@ def init_db():
     """)
 
     migration_add_columns(conn)
+    _create_query_indexes(conn)
+
+    # Encrypt legacy phone values atomically before the API starts.
+    migrate_phone_numbers(conn)
 
     conn.commit()
     conn.close()
+
+
+def migrate_phone_numbers(conn: sqlite3.Connection):
+    """Encrypt any legacy plaintext phone values before the API starts."""
+    rows = conn.execute(
+        "SELECT id, phone FROM users WHERE phone IS NOT NULL AND phone != ''"
+    ).fetchall()
+    for row in rows:
+        encrypted = encrypt_phone(row["phone"])
+        if encrypted != row["phone"]:
+            conn.execute("UPDATE users SET phone = ? WHERE id = ?", (encrypted, row["id"]))
+
+
+def _create_query_indexes(conn: sqlite3.Connection):
+    """Add indexes for the list, dashboard, notification, and SLA queries."""
+    conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_users_student_id ON users(studentId);
+        CREATE INDEX IF NOT EXISTS idx_users_role_created ON users(role, createdAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_repairs_student_created ON repairs(studentId, createdAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_repairs_assignee_status_due ON repairs(assignedTo, status, slaDueDate);
+        CREATE INDEX IF NOT EXISTS idx_repairs_status_due ON repairs(status, slaDueDate);
+        CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(userId, createdAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_reviews_request ON reviews(requestId);
+        CREATE INDEX IF NOT EXISTS idx_repair_parts_repair_created ON repair_parts(repairId, createdAt);
+    """)
 
 
 def migration_add_columns(conn: sqlite3.Connection):
@@ -121,6 +151,8 @@ def migration_add_columns(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE users ADD COLUMN dormBuilding TEXT")
         # 检查 rating 字段是否存在
         columns = [row[1] for row in conn.execute("PRAGMA table_info(repairs)").fetchall()]
+        if 'dormFloor' not in columns:
+            conn.execute("ALTER TABLE repairs ADD COLUMN dormFloor INTEGER")
         if 'rating' not in columns:
             conn.execute("ALTER TABLE repairs ADD COLUMN rating INTEGER")
         if 'workNote' not in columns:

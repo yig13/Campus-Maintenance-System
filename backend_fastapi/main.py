@@ -1,5 +1,11 @@
 import os
 import asyncio
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,10 +24,28 @@ from routes import (
     stats_routes,
 )
 
-app = FastAPI(title="Facilities Maintenance API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    db_existed = os.path.exists(DB_PATH)
+    init_db()
+    if not db_existed:
+        print("数据库已重置，请重新开始注册第一个账号。")
+    else:
+        print(f"数据库已就绪：{DB_PATH}")
 
-# 保持对后台任务的引用，防止被 GC 回收
-_sla_task: asyncio.Task | None = None
+    sla_task = asyncio.create_task(check_sla_compliance_loop())
+    sla_task.add_done_callback(_sla_task_done_callback)
+    try:
+        yield
+    finally:
+        sla_task.cancel()
+        try:
+            await sla_task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="Facilities Maintenance API", lifespan=lifespan)
 
 # Ensure uploads directory exists
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -76,18 +100,3 @@ def _sla_task_done_callback(task: asyncio.Task):
     exc = task.exception()
     if exc:
         print(f"[SLA] 后台任务异常退出: {exc}")
-
-
-@app.on_event("startup")
-def on_startup():
-    global _sla_task
-    db_existed = os.path.exists(DB_PATH)
-    init_db()
-    if not db_existed:
-        print("数据库已重置，请重新开始注册第一个账号。")
-    else:
-        print(f"数据库已就绪：{DB_PATH}")
-
-    # 启动后台异步任务，绑定引用 + 异常回调
-    _sla_task = asyncio.create_task(check_sla_compliance_loop())
-    _sla_task.add_done_callback(_sla_task_done_callback)

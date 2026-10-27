@@ -7,6 +7,8 @@ import { Megaphone, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react
 export default function AnnouncementsBanner({ token, role }: { token: string | null; role: string }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const [hasFocus, setHasFocus] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -29,12 +31,12 @@ export default function AnnouncementsBanner({ token, role }: { token: string | n
   }, [loadAnnouncements]);
 
   useEffect(() => {
-    if (announcements.length <= 1) return;
+    if (announcements.length <= 1 || isHovered || hasFocus) return;
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % announcements.length);
-    }, 10000);
+    }, 15000);
     return () => clearInterval(interval);
-  }, [announcements.length]);
+  }, [announcements.length, isHovered, hasFocus]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,13 +80,23 @@ export default function AnnouncementsBanner({ token, role }: { token: string | n
 
   return (
     <div className="mb-6">
-      <div className="min-h-24 bg-orange-50 border border-orange-100 rounded-2xl p-4 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
+      <div
+        className="h-36 sm:h-32 bg-orange-50 border border-orange-100 rounded-2xl p-4 flex items-start justify-between gap-3"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onFocusCapture={() => setHasFocus(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setHasFocus(false);
+          }
+        }}
+      >
+        <div className="flex h-full min-h-0 items-start gap-3 flex-1 min-w-0">
           <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
             <Megaphone className="w-4 h-4 text-orange-600" />
           </div>
           {announcements.length > 0 ? (
-            <div className="flex-1 min-w-0">
+            <div className="h-full min-h-0 flex-1 min-w-0 overflow-y-auto overscroll-contain pr-1 touch-pan-y">
               <p className="text-sm font-semibold text-orange-900 whitespace-pre-wrap break-words">
                 {announcements[currentIndex]?.title}
               </p>
