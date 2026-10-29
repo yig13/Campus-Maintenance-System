@@ -134,6 +134,10 @@ def _create_query_indexes(conn: sqlite3.Connection):
         CREATE INDEX IF NOT EXISTS idx_repairs_student_created ON repairs(studentId, createdAt DESC);
         CREATE INDEX IF NOT EXISTS idx_repairs_assignee_status_due ON repairs(assignedTo, status, slaDueDate);
         CREATE INDEX IF NOT EXISTS idx_repairs_status_due ON repairs(status, slaDueDate);
+        CREATE INDEX IF NOT EXISTS idx_repairs_created ON repairs(createdAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_repairs_category ON repairs(category);
+        CREATE INDEX IF NOT EXISTS idx_repairs_building ON repairs(dormBuilding);
+        CREATE INDEX IF NOT EXISTS idx_repairs_assignee_status_rating ON repairs(assignedTo, status, rating);
         CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(userId, createdAt DESC);
         CREATE INDEX IF NOT EXISTS idx_reviews_request ON reviews(requestId);
         CREATE INDEX IF NOT EXISTS idx_repair_parts_repair_created ON repair_parts(repairId, createdAt);

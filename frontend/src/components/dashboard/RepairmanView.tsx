@@ -10,6 +10,7 @@ import {
 import { Badge, SlaBadge } from '../shared/StatusBadge';
 // import ConsumedPartsList from '../shared/ConsumedPartsList'; // 暂时隐藏物料消耗展示。
 import RepairDetailModal from '../shared/RepairDetailModal';
+import Pagination from '../custom/Pagination';
 import { tCat, tStatus, tPriority, STATUS_COLOR, PRIORITY_COLOR } from '../shared/constants';
 
 export default function RepairmanView({ token }: { token: string | null }) {
@@ -22,6 +23,10 @@ export default function RepairmanView({ token }: { token: string | null }) {
   const [updating, setUpdating] = useState(false);
   const [tab, setTab] = useState<'tasks' | 'stats'>('tasks');
   const [taskStatusFilter, setTaskStatusFilter] = useState<'waiting' | 'ready' | 'in_progress' | 'completed'>('waiting');
+  const [tasksPage, setTasksPage] = useState(1);
+  const [tasksTotal, setTasksTotal] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({ waiting: 0, ready: 0, in_progress: 0, completed: 0, averageRating: 0, ratingCount: 0, totalAssigned: 0 });
+  const tasksPageSize = 20;
 
   // parts state
   const [inventoryParts, setInventoryParts] = useState<Part[]>([]);
@@ -30,13 +35,21 @@ export default function RepairmanView({ token }: { token: string | null }) {
   const loadTasks = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authFetch(API.REPAIRS.LIST, token);
-      const data = await res.json() as ApiResponse<RepairRequest[]>;
-      if (data.success) setTasks(data.data);
+      const query = new URLSearchParams({ page: String(tasksPage), pageSize: String(tasksPageSize), status: taskStatusFilter });
+      const res = await authFetch(`${API.REPAIRS.LIST}?${query}`, token);
+      const data = await res.json() as ApiResponse<RepairRequest[]> & {
+        total?: number;
+        statusCounts?: typeof statusCounts;
+      };
+      if (data.success) {
+        setTasks(data.data);
+        setTasksTotal(data.total ?? data.data.length);
+        if (data.statusCounts) setStatusCounts(data.statusCounts);
+      }
       else toast.error(data.message || (language === 'zh' ? '加载失败' : 'Load failed'));
     } catch { toast.error(language === 'zh' ? '加载失败，请确认后端服务已启动' : 'Load failed, make sure backend service is running'); }
     finally { setLoading(false); }
-  }, [token, language]);
+  }, [token, language, tasksPage, tasksPageSize, taskStatusFilter]);
 
   const loadInventoryParts = useCallback(async () => {
     if (!token) return;
@@ -89,17 +102,12 @@ export default function RepairmanView({ token }: { token: string | null }) {
   }
 
 
-  const pending = tasks.filter(t => t.status === 'waiting');
-  const ready = tasks.filter(t => t.status === 'ready');
-  const inProgress = tasks.filter(t => t.status === 'in_progress');
-  const completed = tasks.filter(t => t.status === 'pending_evaluation' || t.status === 'closed');
-  const filteredTasks = tasks.filter((task) => {
-    if (taskStatusFilter === 'completed') return task.status === 'pending_evaluation' || task.status === 'closed';
-    return task.status === taskStatusFilter;
-  });
+  const filteredTasks = tasks;
 
-  const ratedTasks = completed.filter(t => t.rating && t.rating > 0);
-  const avgRating = ratedTasks.length > 0 ? (ratedTasks.reduce((acc, t) => acc + (t.rating || 0), 0) / ratedTasks.length).toFixed(1) : '暂无';
+  const pending = statusCounts.waiting;
+  const ready = statusCounts.ready;
+  const inProgress = statusCounts.in_progress;
+  const avgRating = statusCounts.ratingCount > 0 ? statusCounts.averageRating.toFixed(1) : '暂无';
 
   return (
     <div>
@@ -127,10 +135,10 @@ export default function RepairmanView({ token }: { token: string | null }) {
           {/* Stats Summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             {[
-              { label: t('status_waiting'), count: pending.length, color: 'bg-yellow-50 text-yellow-700', icon: Clock },
-              { label: t('status_ready'), count: ready.length, color: 'bg-blue-50 text-blue-700', icon: Clock },
-              { label: t('status_in_progress'), count: inProgress.length, color: 'bg-purple-50 text-purple-700', icon: Wrench },
-              { label: t('status_completed'), count: completed.length, color: 'bg-green-50 text-green-700', icon: CheckCircle },
+              { label: t('status_waiting'), count: statusCounts.waiting, color: 'bg-yellow-50 text-yellow-700', icon: Clock },
+              { label: t('status_ready'), count: statusCounts.ready, color: 'bg-blue-50 text-blue-700', icon: Clock },
+              { label: t('status_in_progress'), count: statusCounts.in_progress, color: 'bg-purple-50 text-purple-700', icon: Wrench },
+              { label: t('status_completed'), count: statusCounts.completed, color: 'bg-green-50 text-green-700', icon: CheckCircle },
             ].map(({ label, count, color, icon: Icon }) => (
               <div key={label} className={`rounded-2xl p-4 ${color} flex flex-col items-center`}>
                 <Icon className="w-5 h-5 mb-1" />
@@ -152,7 +160,7 @@ export default function RepairmanView({ token }: { token: string | null }) {
                 type="button"
                 role="tab"
                 aria-selected={taskStatusFilter === status}
-                onClick={() => setTaskStatusFilter(status)}
+                onClick={() => { setTasksPage(1); setTaskStatusFilter(status); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                   taskStatusFilter === status ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
@@ -339,6 +347,7 @@ export default function RepairmanView({ token }: { token: string | null }) {
           ))}
         </div>
       )}
+      <Pagination currentPage={tasksPage} totalCount={tasksTotal} pageSize={tasksPageSize} onPageChange={setTasksPage} />
         </>
       )}
 
@@ -349,23 +358,23 @@ export default function RepairmanView({ token }: { token: string | null }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-blue-50 text-blue-700 rounded-2xl p-4 flex flex-col">
                 <span className="text-xs font-medium mb-1">{language === 'zh' ? '总任务数' : 'Total Tasks'}</span>
-                <span className="text-3xl font-bold">{tasks.length}</span>
+                <span className="text-3xl font-bold">{statusCounts.totalAssigned}</span>
               </div>
               <div className="bg-green-50 text-green-700 rounded-2xl p-4 flex flex-col">
                 <span className="text-xs font-medium mb-1">{language === 'zh' ? '已完成任务' : 'Completed Tasks'}</span>
-                <span className="text-3xl font-bold">{completed.length}</span>
+                <span className="text-3xl font-bold">{statusCounts.completed}</span>
               </div>
               <div className="bg-yellow-50 text-yellow-700 rounded-2xl p-4 flex flex-col">
                 <span className="text-xs font-medium mb-1">{language === 'zh' ? '待接单任务' : 'Waiting Tasks'}</span>
-                <span className="text-3xl font-bold">{pending.length}</span>
+                <span className="text-3xl font-bold">{pending}</span>
               </div>
               <div className="bg-blue-50 text-blue-700 rounded-2xl p-4 flex flex-col">
                 <span className="text-xs font-medium mb-1">{t('status_ready')}</span>
-                <span className="text-3xl font-bold">{ready.length}</span>
+                <span className="text-3xl font-bold">{ready}</span>
               </div>
               <div className="bg-purple-50 text-purple-700 rounded-2xl p-4 flex flex-col">
                 <span className="text-xs font-medium mb-1">{language === 'zh' ? '进行中任务' : 'In Progress Tasks'}</span>
-                <span className="text-3xl font-bold">{inProgress.length}</span>
+                <span className="text-3xl font-bold">{inProgress}</span>
               </div>
             </div>
 

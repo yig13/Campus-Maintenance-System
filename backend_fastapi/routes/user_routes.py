@@ -38,14 +38,12 @@ async def update_user_skills(user_id: str, payload: UpdateSkillsRequest, current
 
 
 @router.get("/api/users")
-async def get_users(
-    page: Optional[int] = Query(default=None, ge=1),
-    pageSize: Optional[int] = Query(default=None, ge=1, le=100),
+def get_users(
+    page: int = Query(default=1, ge=1),
+    pageSize: int = Query(default=20, ge=1, le=100),
     role: Optional[str] = None,
     current_user: dict = Depends(require_admin)
 ):
-    if (page is None) != (pageSize is None):
-        raise HTTPException(status_code=400, detail="page 和 pageSize 必须同时提供")
     conn = get_db()
     try:
         conditions = []
@@ -58,11 +56,8 @@ async def get_users(
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         total = conn.execute(f"SELECT COUNT(*) FROM users {where_clause}", params).fetchone()[0]
         query = f"SELECT id, name, role, studentId as userId, dormBuilding, dormRoom, phone, skills, createdAt FROM users {where_clause} ORDER BY createdAt DESC"
-        if page is not None and pageSize is not None:
-            query += " LIMIT ? OFFSET ?"
-            query_params = [*params, pageSize, (page - 1) * pageSize]
-        else:
-            query_params = params
+        query += " LIMIT ? OFFSET ?"
+        query_params = [*params, pageSize, (page - 1) * pageSize]
         rows = conn.execute(query, query_params).fetchall()
     finally:
         conn.close()
@@ -72,16 +67,13 @@ async def get_users(
         user["phone"] = decrypt_phone(user.get("phone"))
         if user.get("role") == "repairman":
             user["skills"] = _normalize_skills(user.get("skills") or "")
-    if page is not None and pageSize is not None:
-        return {
-            "success": True,
-            "data": data,
-            "total": total,
-            "page": page,
-            "pageSize": pageSize
-        }
-    else:
-        return {"success": True, "data": data, "total": total}
+    return {
+        "success": True,
+        "data": data,
+        "total": total,
+        "page": page,
+        "pageSize": pageSize
+    }
 
 
 @router.get("/api/users/repairmen")

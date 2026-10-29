@@ -55,7 +55,7 @@ async def register(payload: SignupRequest):
 
 
 @router.post("/api/login")
-async def login(payload: LoginRequest):
+def login(payload: LoginRequest):
     identifier = payload.userId.strip()
     if not identifier:
         raise HTTPException(status_code=400, detail="请输入学号/工号")

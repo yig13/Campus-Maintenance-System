@@ -28,14 +28,12 @@ def _mask_phone(phone: Optional[str]) -> str:
 
 
 @router.get("/api/repairs")
-async def get_repairs(
-    page: Optional[int] = Query(default=None, ge=1),
-    pageSize: Optional[int] = Query(default=None, ge=1, le=100),
+def get_repairs(
+    page: int = Query(default=1, ge=1),
+    pageSize: int = Query(default=20, ge=1, le=100),
     status: Optional[str] = None,
     current_user: dict = Depends(verify_token)
 ):
-    if (page is None) != (pageSize is None):
-        raise HTTPException(status_code=400, detail="page 和 pageSize 必须同时提供")
     conn = get_db()
     role = current_user.get("role", "user")
     user_id = current_user.get("userId", "")
@@ -61,6 +59,30 @@ async def get_repairs(
 
         total_query = f"SELECT COUNT(*) FROM repairs r {where_clause}"
         total = conn.execute(total_query, params).fetchone()[0]
+
+        status_counts = None
+        if role == "repairman":
+            visible_clause = "(assignedTo = ? OR (assignedTo IS NULL AND status = 'waiting'))"
+            counts = conn.execute(
+                f"SELECT status, COUNT(*) AS count FROM repairs WHERE {visible_clause} GROUP BY status",
+                (user_id,),
+            ).fetchall()
+            count_map = {row["status"]: row["count"] for row in counts}
+            status_counts = {
+                "waiting": count_map.get("waiting", 0),
+                "ready": count_map.get("ready", 0),
+                "in_progress": count_map.get("in_progress", 0),
+                "completed": count_map.get("pending_evaluation", 0) + count_map.get("closed", 0),
+            }
+            rating_row = conn.execute(
+                "SELECT AVG(CASE WHEN status IN ('pending_evaluation', 'closed') THEN rating END) AS average, "
+                "COUNT(CASE WHEN status IN ('pending_evaluation', 'closed') THEN rating END) AS count, "
+                "COUNT(*) AS total FROM repairs WHERE assignedTo = ?",
+                (user_id,),
+            ).fetchone()
+            status_counts["averageRating"] = rating_row["average"] or 0
+            status_counts["ratingCount"] = rating_row["count"] or 0
+            status_counts["totalAssigned"] = rating_row["total"] or 0
 
         # 维修员/管理员按紧急程度排序（待接单优先 + SLA截止时间升序），用户按创建时间倒序
         if role in ("repairman", "admin"):
@@ -91,11 +113,27 @@ async def get_repairs(
             {order_clause}
         """
 
-        if page is not None and pageSize is not None:
-            data_query += " LIMIT ? OFFSET ?"
-            limit = pageSize
-            offset = (page - 1) * pageSize
-            params.extend([limit, offset])
+        if role == "repairman" and status == "completed":
+            # “已完成”标签对应待评价和已结案两种最终状态。
+            conditions[-1] = "r.status IN ('pending_evaluation', 'closed')"
+            params.pop()  # completed 状态由 SQL 的两个最终状态固定展开，没有占位符。
+            where_clause = "WHERE " + " AND ".join(conditions)
+            data_query = f"""
+                SELECT r.*,
+                       r.studentId as userId,
+                       u.name as userName,
+                       u.phone as userPhone,
+                       t.name as assignedToName
+                FROM repairs r
+                LEFT JOIN users u ON r.studentId = u.id
+                LEFT JOIN users t ON r.assignedTo = t.id
+                {where_clause}
+                {order_clause}
+            """
+            total = status_counts["completed"]
+
+        data_query += " LIMIT ? OFFSET ?"
+        params.extend([pageSize, (page - 1) * pageSize])
 
         rows = conn.execute(data_query, params).fetchall()
     finally:
@@ -112,16 +150,16 @@ async def get_repairs(
                 if repair.get("status") == "waiting"
                 else (phone or "")
             )
-    if page is not None and pageSize is not None:
-        return {
-            "success": True,
-            "data": data,
-            "total": total,
-            "page": page,
-            "pageSize": pageSize
-        }
-    else:
-        return {"success": True, "data": data, "total": total}
+    response = {
+        "success": True,
+        "data": data,
+        "total": total,
+        "page": page,
+        "pageSize": pageSize,
+    }
+    if status_counts is not None:
+        response["statusCounts"] = status_counts
+    return response
 
 
 @router.post("/api/repairs")

@@ -6,18 +6,32 @@ from database import get_db
 from auth import require_admin
 
 router = APIRouter()
+_STATS_CACHE_SECONDS = 30
+_stats_cache = {"expires_at": 0.0, "data": None}
 
 
 @router.get("/api/stats")
-async def get_stats(_current_user: dict = Depends(require_admin)):
+def get_stats(_current_user: dict = Depends(require_admin)):
+    now_monotonic = time.monotonic()
+    if _stats_cache["data"] is not None and now_monotonic < _stats_cache["expires_at"]:
+        return {"success": True, "data": _stats_cache["data"]}
+
     conn = get_db()
 
     try:
-        total = conn.execute("SELECT COUNT(*) FROM repairs").fetchone()[0]
-        pending = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'waiting'").fetchone()[0]
-        in_progress = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'in_progress'").fetchone()[0]
-        completed = conn.execute("SELECT COUNT(*) FROM repairs WHERE status IN ('pending_evaluation', 'closed')").fetchone()[0]
-        rejected = conn.execute("SELECT COUNT(*) FROM repairs WHERE status = 'rejected'").fetchone()[0]
+        repair_counts = conn.execute("""
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN status = 'waiting' THEN 1 ELSE 0 END) AS pending,
+                   SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+                   SUM(CASE WHEN status IN ('pending_evaluation', 'closed') THEN 1 ELSE 0 END) AS completed,
+                   SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected
+            FROM repairs
+        """).fetchone()
+        total = repair_counts["total"] or 0
+        pending = repair_counts["pending"] or 0
+        in_progress = repair_counts["in_progress"] or 0
+        completed = repair_counts["completed"] or 0
+        rejected = repair_counts["rejected"] or 0
         category_rows = conn.execute("SELECT category, COUNT(*) as count FROM repairs GROUP BY category").fetchall()
         building_rows = conn.execute(
             """SELECT dormBuilding as building, COUNT(*) as count
@@ -31,14 +45,6 @@ async def get_stats(_current_user: dict = Depends(require_admin)):
         repairman_count = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'repairman'").fetchone()[0]
         reviews = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
         avg_rating_row = conn.execute("SELECT AVG(rating) FROM reviews").fetchone()[0]
-    finally:
-        conn.close()
-
-    category_stats = [{"category": r["category"], "count": r["count"]} for r in category_rows]
-    building_stats = [{"building": r["building"], "count": r["count"]} for r in building_rows]
-
-    try:
-        conn = get_db()
         trend_query = """
             SELECT date(createdAt) as date, COUNT(*) as count
             FROM repairs
@@ -84,9 +90,9 @@ async def get_stats(_current_user: dict = Depends(require_admin)):
     finally:
         conn.close()
 
-    return {
-        "success": True,
-        "data": {
+    category_stats = [{"category": r["category"], "count": r["count"]} for r in category_rows]
+    building_stats = [{"building": r["building"], "count": r["count"]} for r in building_rows]
+    stats_data = {
             "totalRequests": total,
             "pendingRequests": pending,
             "inProgressRequests": in_progress,
@@ -104,5 +110,10 @@ async def get_stats(_current_user: dict = Depends(require_admin)):
             "averageResponseTimeHours": float(f"{avg_response_time:.2f}"),
             "totalCost": float(f"{total_cost:.2f}"),
             "partsConsumedStats": parts_consumed_stats,
-        },
+        }
+    _stats_cache["data"] = stats_data
+    _stats_cache["expires_at"] = time.monotonic() + _STATS_CACHE_SECONDS
+    return {
+        "success": True,
+        "data": stats_data,
     }
