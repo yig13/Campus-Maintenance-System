@@ -49,3 +49,10 @@ yarn-error.log*
 
 # 启动脚本日志
 logs/
+
+# 其他
+deploy.sh
+sync-and-deploy.sh
+webhook.py
+backend_fastapi/seed_db.py
+backend_fastapi/add_user.py
