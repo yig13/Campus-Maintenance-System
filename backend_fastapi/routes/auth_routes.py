@@ -1,6 +1,6 @@
 import uuid
 import time
-
+import re
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -22,12 +22,21 @@ async def register(payload: SignupRequest):
     phone = payload.phone.strip()
     student_id = payload.userId.strip()
     building = payload.dormBuilding.strip()
+    name_pattern = re.compile(r"[\u4e00-\u9fa5]+")
+    phone_pattern = re.compile(r"^1[3-9]\d{9}$")
+    PASSWORD_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^\s]{6,10}$")
     if not name or not phone or not student_id or not building:
         raise HTTPException(status_code=400, detail="姓名、学号/工号、手机号和楼栋均为必填项")
+    if not name_pattern.match(name):
+        raise HTTPException(status_code=400, detail="姓名无效，请填写正确的中文姓名")
+    if not phone_pattern.match(phone):
+        raise HTTPException(status_code=400, detail="手机号码无效，请填写正确的号码")
+    if len(student_id) != 9 or not student_id.isdigit():
+        raise HTTPException(status_code=400, detail="学号/工号无效，请填写9位学号/工号")
     if building not in DORM_BUILDINGS:
         raise HTTPException(status_code=400, detail="楼栋选择无效")
-    if len(payload.password) < 6:
-        raise HTTPException(status_code=400, detail="密码长度不能少于6位")
+    if not PASSWORD_PATTERN.match(payload.password):
+        raise HTTPException(status_code=400, detail="密码需包含大小写字母和数字，6-10位")
     if payload.confirmPassword is not None and payload.password != payload.confirmPassword:
         raise HTTPException(status_code=400, detail="两次输入的密码不一致")
 

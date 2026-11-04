@@ -49,15 +49,23 @@ export default function SettingsModal({
 
   async function handleUpdateProfile(e: React.FormEvent) {
     e.preventDefault();
-    if (!profileForm.name.trim()) {
-      toast.error('姓名不能为空');
+    const phone = profileForm.phone.trim();
+    if (!/^13\d{9}$/.test(phone)) {
+      toast.error('请填写正确的手机号码');
       return;
+    }
+    const payload: { phone: string; dormBuilding?: string; dormRoom?: string } = {
+      phone,
+    };
+    if (initialProfile?.role === 'user') {
+      payload.dormBuilding = profileForm.dormBuilding;
+      payload.dormRoom = profileForm.dormRoom;
     }
     setLoading(true);
     try {
       const res = await authFetch(API.USERS.UPDATE_PROFILE, token, {
         method: 'PUT',
-        body: JSON.stringify(profileForm),
+        body: JSON.stringify(payload),
       });
       const data = await res.json() as ApiResponse<User>;
       if (data.success) {
@@ -80,8 +88,8 @@ export default function SettingsModal({
       toast.error('请填写所有密码字段');
       return;
     }
-    if (passwordForm.newPassword.length < 6) {
-      toast.error('新密码长度不能少于6位');
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^\s]{6,10}$/.test(passwordForm.newPassword)) {
+      toast.error('新密码需包含大小写字母和数字，长度为6-10位且不能包含空格');
       return;
     }
     if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
@@ -137,36 +145,19 @@ export default function SettingsModal({
           {activeTab === 'profile' ? (
             <form onSubmit={handleUpdateProfile} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">姓名 <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">电话 <span className="text-red-500">*</span></label>
                 <input
-                  type="text"
-                  value={profileForm.name}
-                  onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))}
-                  className="w-full px-3.5 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition pr-10"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">电话</label>
-                <input
-                  type="text"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={11}
                   value={profileForm.phone}
-                  onChange={(e) => setProfileForm(p => ({ ...p, phone: e.target.value }))}
+                  onChange={(e) => setProfileForm(p => ({ ...p, phone: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
                   className="w-full px-3.5 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition pr-10"
-                  placeholder="未填写电话"
+                  placeholder="请输入13开头的11位手机号码"
                 />
               </div>
               {initialProfile.role === 'user' && (
                 <>
-                  <div>
-                    <label className="block text-xs font-semibold text-muted-foreground mb-1">学号/工号</label>
-                    <input
-                      type="text"
-                      value={profileForm.userId}
-                      onChange={(e) => setProfileForm(p => ({ ...p, userId: e.target.value }))}
-                      className="w-full px-3.5 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition pr-10"
-                      placeholder="未填写学号/工号"
-                    />
-                  </div>
                   <div>
                     <label className="block text-xs font-semibold text-muted-foreground mb-1">楼栋</label>
                     <select
@@ -230,7 +221,7 @@ export default function SettingsModal({
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm(p => ({ ...p, newPassword: e.target.value }))}
                   className="w-full px-3.5 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition pr-10"
-                  placeholder="至少6位"
+                  placeholder="6-10位，需包含大小写字母和数字"
                 />
               </div>
               <div>

@@ -52,9 +52,7 @@ class UpdateRepairStatus(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=32)
-    userId: Optional[str] = Field(default=None, min_length=1, max_length=100)
     dormBuilding: Optional[str] = Field(default=None, max_length=100)
     dormRoom: Optional[str] = Field(default=None, max_length=64)
 

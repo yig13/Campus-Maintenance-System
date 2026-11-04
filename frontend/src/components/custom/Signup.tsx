@@ -123,7 +123,7 @@ export default function Signup() {
                   required
                   value={form.userId}
                   onChange={(e) => handleChange('userId', e.target.value)}
-                  placeholder="请输入学号/工号"
+                  placeholder="请输入9位学号/工号"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 />
               </div>
@@ -155,7 +155,7 @@ export default function Signup() {
                     required
                     value={form.password}
                     onChange={(e) => handleChange('password', e.target.value)}
-                    placeholder="至少6个字符"
+                    placeholder="请设置密码"
                     className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition pr-10"
                   />
                   <button
@@ -165,6 +165,7 @@ export default function Signup() {
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
+                  <p className="text-xs text-muted-foreground mt-1">密码需包含大小写字母和数字，6-10位</p>
                 </div>
               </div>
               <div>
@@ -175,7 +176,7 @@ export default function Signup() {
                   required
                   value={form.confirmPassword}
                   onChange={(e) => handleChange('confirmPassword', e.target.value)}
-                  placeholder="再次输入密码"
+                  placeholder="请再次输入密码"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 />
               </div>

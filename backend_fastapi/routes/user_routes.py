@@ -1,6 +1,7 @@
 import os
 import uuid
 import time
+import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
@@ -180,31 +181,16 @@ async def update_profile(payload: UpdateProfileRequest, current_user: dict = Dep
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
-
         updates = []
         values = []
-
-        if payload.name is not None:
-            updates.append("name = ?")
-            values.append(payload.name)
-
         if payload.phone is not None:
-            updates.append("phone = ?")
-            values.append(encrypt_phone(payload.phone))
-
+            phone_pattern = re.compile(r"^1[3-9]\d{9}$")
+            if not phone_pattern.match(payload.phone):
+                raise HTTPException(status_code=400, detail="手机号码无效，请填写正确的号码")
+            else:
+                updates.append("phone = ?")
+                values.append(encrypt_phone(payload.phone))
         if user["role"] == "user":
-            if payload.userId is not None:
-                student_id = payload.userId.strip()
-                if not student_id:
-                    raise HTTPException(status_code=400, detail="学号/工号不能为空")
-                duplicate = conn.execute(
-                    "SELECT id FROM users WHERE studentId = ? AND id != ?",
-                    (student_id, user_id),
-                ).fetchone()
-                if duplicate:
-                    raise HTTPException(status_code=400, detail="该学号/工号已被其他账号使用")
-                updates.append("studentId = ?")
-                values.append(student_id)
             if payload.dormBuilding is not None:
                 if payload.dormBuilding not in DORM_BUILDINGS:
                     raise HTTPException(status_code=400, detail="楼栋选择无效")
@@ -227,7 +213,7 @@ async def update_profile(payload: UpdateProfileRequest, current_user: dict = Dep
         conn.commit()
 
         updated_user = conn.execute(
-            "SELECT id, name, role, studentId as userId, dormBuilding, dormRoom, phone, createdAt FROM users WHERE id = ?",
+            "SELECT id, role, dormBuilding, dormRoom, phone, createdAt FROM users WHERE id = ?",
             (user_id,)
         ).fetchone()
     finally:
@@ -242,12 +228,11 @@ async def update_profile(payload: UpdateProfileRequest, current_user: dict = Dep
 @router.post("/api/users/change-password")
 async def change_password(payload: ChangePasswordRequest, current_user: dict = Depends(verify_token)):
     user_id = current_user.get("userId", "")
-
-    if len(payload.newPassword) < 6:
-        raise HTTPException(status_code=400, detail="新密码长度不能少于6位")
-
-    if payload.newPassword != payload.confirmNewPassword:
-        raise HTTPException(status_code=400, detail="两次输入的新密码不一致")
+    PASSWORD_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^\s]{6,10}$")
+    if not PASSWORD_PATTERN.match(payload.password):
+        raise HTTPException(status_code=400, detail="密码需包含大小写字母和数字，6-10位")
+    if payload.confirmPassword is not None and payload.password != payload.confirmPassword:
+        raise HTTPException(status_code=400, detail="两次输入的密码不一致")
 
     conn = get_db()
     try:

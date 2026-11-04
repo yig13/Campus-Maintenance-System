@@ -74,24 +74,24 @@ export default function Index() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="bg-white border-b border-border sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 h-16 flex items-center justify-between gap-2">
           <div
             onClick={() => window.location.reload()}
-            className="flex items-center gap-3 cursor-pointer select-none group"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none group min-w-0"
             title={language === 'zh' ? '刷新工作台' : 'Refresh dashboard'}
           >
-            <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center group-hover:scale-105 active:scale-95 transition">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 bg-primary rounded-xl flex items-center justify-center group-hover:scale-105 active:scale-95 transition">
               <Wrench className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h1 className="font-bold text-foreground leading-tight group-hover:text-primary transition">{t('title')}</h1>
+            <div className="min-w-0">
+              <h1 className="font-bold text-sm sm:text-base text-foreground leading-tight group-hover:text-primary transition truncate">{t('title')}</h1>
               <p className="text-xs text-muted-foreground hidden sm:block">{t('subtitle')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-3 shrink-0">
             <button
               onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition font-medium"
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition font-medium"
               title={language === 'zh' ? 'Switch to English' : '切换为中文'}
             >
               <span>🌐</span>
@@ -100,19 +100,28 @@ export default function Index() {
             <NotificationsMenu token={token} />
             <div
               onClick={() => setIsSettingsOpen(true)}
-              className="hidden sm:flex items-center gap-2 cursor-pointer hover:bg-muted p-1.5 rounded-xl transition duration-200 active:scale-95 select-none"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setIsSettingsOpen(true);
+                }
+              }}
+              tabIndex={0}
+              className="flex items-center gap-1.5 sm:gap-2 cursor-pointer hover:bg-muted p-1 sm:p-1.5 rounded-xl transition duration-200 active:scale-95 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               title={t('settings')}
+              role="button"
+              aria-label={t('settings')}
             >
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shadow-inner">
-                <span className="text-primary font-semibold text-sm">{displayProfile.name.charAt(0)}</span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-primary/10 flex items-center justify-center shadow-inner">
+                <span className="text-primary font-semibold text-xs sm:text-sm">{displayProfile.name.charAt(0)}</span>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-foreground leading-tight">{displayProfile.name}</p>
+              <div className="text-right min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-foreground leading-tight truncate max-w-[4.5rem] sm:max-w-none">{displayProfile.name}</p>
                 <Badge label={roleLabel} colorClass={roleColor} />
               </div>
             </div>
             <button onClick={logout}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition">
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition">
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">{t('logout')}</span>
             </button>

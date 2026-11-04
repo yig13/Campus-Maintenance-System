@@ -65,7 +65,7 @@ export default function NotificationsMenu({ token }: { token: string | null }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-border shadow-xl rounded-2xl z-50 overflow-hidden flex flex-col max-h-[400px]">
+        <div className="fixed left-3 right-3 top-[4.5rem] z-50 w-auto max-h-[70vh] bg-white border border-border shadow-xl rounded-2xl overflow-hidden flex flex-col sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 sm:max-h-[400px]">
           <div className="p-3 border-b border-border flex justify-between items-center bg-muted/30">
             <h3 className="font-semibold text-sm">消息通知</h3>
             {unreadCount > 0 && (

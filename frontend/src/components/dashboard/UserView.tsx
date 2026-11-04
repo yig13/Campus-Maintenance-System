@@ -61,6 +61,10 @@ export default function UserView({ token }: { token: string | null }) {
     if (!form.dormBuilding || (floorRequired && !form.dormFloor) || (roomRequired && !form.dormRoom.trim()) || !form.category || !form.description) {
       toast.error(language === 'zh' ? '请填写所有必填项' : 'Please fill in all required fields'); return;
     }
+    if (!form.imageUrl.split(',').some((url) => url.trim())) {
+      toast.error(language === 'zh' ? '请至少上传1张故障照片' : 'Please upload at least one fault photo');
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await authFetch(API.REPAIRS.CREATE, token, {
@@ -198,7 +202,7 @@ export default function UserView({ token }: { token: string | null }) {
               <p className="mt-1 text-right text-xs text-muted-foreground">{form.description.length}/50</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">{t('uploadPhoto')} <span className="font-normal text-muted-foreground">({t('photoUploadHint')})</span></label>
+              <label className="block text-sm font-medium text-foreground mb-2">{t('uploadPhoto')} <span className="text-red-500">*</span> <span className="font-normal text-muted-foreground">({language === 'zh' ? '请上传1~3张图片，卫生间堵塞请用其他图片代替' : '1 to 3 photos'})</span></label>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-2">
                 {/* 渲染已有图片的缩略图 */}
                 {form.imageUrl ? form.imageUrl.split(',').map((imgUrl, idx) => (

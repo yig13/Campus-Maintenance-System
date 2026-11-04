@@ -231,7 +231,7 @@ python seed_db.py
 
 ```bash
 cd backend_fastapi
-python produce_seed.py
+python add_user.py
 ```
 
 ### 访问地址

@@ -84,21 +84,18 @@ def get_repairs(
             status_counts["ratingCount"] = rating_row["count"] or 0
             status_counts["totalAssigned"] = rating_row["total"] or 0
 
-        # 维修员/管理员按紧急程度排序（待接单优先 + SLA截止时间升序），用户按创建时间倒序
-        if role in ("repairman", "admin"):
-            order_clause = """ORDER BY
-                CASE r.status
-                    WHEN 'waiting' THEN 1
-                    WHEN 'ready' THEN 2
-                    WHEN 'in_progress' THEN 3
-                    WHEN 'pending_evaluation' THEN 4
-                    WHEN 'closed' THEN 5
-                    WHEN 'rejected' THEN 6
-                    ELSE 7
-                END,
-                r.slaDueDate ASC"""
+        # 所有角色先将 SLA 超期且仍未结案/拒绝的工单置顶。
+        order_params = [time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())]
+        overdue_order = "CASE WHEN r.slaDueDate IS NOT NULL AND r.slaDueDate < ? AND r.status NOT IN ('closed', 'rejected') THEN 0 ELSE 1 END"
+        if role == "repairman":
+            # 维修员按配置目录排列：公寓1-10栋，然后公共区域列表顺序。
+            building_order = "CASE r.dormBuilding " + " ".join(
+                f"WHEN ? THEN {index}" for index, building in enumerate(DORM_BUILDINGS)
+            ) + f" ELSE {len(DORM_BUILDINGS)} END"
+            order_params.extend(DORM_BUILDINGS)
+            order_clause = f"ORDER BY {overdue_order}, {building_order}, r.dormFloor ASC, r.dormRoom ASC, r.createdAt DESC"
         else:
-            order_clause = "ORDER BY r.createdAt DESC"
+            order_clause = f"ORDER BY {overdue_order}, r.createdAt DESC"
 
         data_query = f"""
             SELECT r.*,
@@ -133,7 +130,7 @@ def get_repairs(
             total = status_counts["completed"]
 
         data_query += " LIMIT ? OFFSET ?"
-        params.extend([pageSize, (page - 1) * pageSize])
+        params.extend([*order_params, pageSize, (page - 1) * pageSize])
 
         rows = conn.execute(data_query, params).fetchall()
     finally:
@@ -174,6 +171,8 @@ async def create_repair(payload: CreateRepairRequest, current_user: dict = Depen
         raise HTTPException(status_code=400, detail="报修类型无效")
 
     image_urls = [url for url in (payload.imageUrl or "").split(",") if url.strip()]
+    if not image_urls:
+        raise HTTPException(status_code=400, detail="请至少上传1张故障照片")
     if len(image_urls) > 3:
         raise HTTPException(status_code=400, detail="故障照片最多上传3张")
 
