@@ -63,11 +63,18 @@ export const FAULT_CATEGORY_GROUPS: { group: string; options: FaultCategoryOptio
     options: [{ value: 'washer', disabled: true }, { value: 'ac' }],
   },
   {
+    group: '教学办公类',
+    options: [
+      { value: 'projector' }, { value: 'computer' }, { value: 'monitor' },
+      { value: 'keyboard' }, { value: 'mouse' }, { value: 'speakers' }, { value: 'screen' },
+    ],
+  },
+  {
     group: '其他类',
-    options: [{ value: 'office' }, { value: 'other_item' }],
+    options: [{ value: 'other_item' }],
   },
 ];
-export const CATEGORY_DISPLAY_GROUP: Record<string, 'general' | 'hotWater' | 'appliance' | 'other'> = {
+export const CATEGORY_DISPLAY_GROUP: Record<string, 'general' | 'hotWater' | 'appliance' |  'office'  | 'other'> = {
   // 新版叶子故障分类
   lamp: 'general', trip: 'general', sink: 'general', cistern: 'general',
   wardrobe: 'general', bed: 'general', desk: 'general', lock: 'general',
@@ -78,7 +85,7 @@ export const CATEGORY_DISPLAY_GROUP: Record<string, 'general' | 'hotWater' | 'ap
   outlet: 'general', switch: 'general',
   heat_pump: 'hotWater', shower: 'hotWater',
   washer: 'appliance', ac: 'appliance',
-  office: 'other',
+  projector: 'office', computer: 'office', monitor: 'office', keyboard: 'office', mouse: 'office', speakers: 'office', screen: 'office',
   other_item: 'other',
   // 历史大类工单的兼容映射
   water: 'hotWater', electricity: 'appliance', furniture: 'general',
@@ -91,12 +98,12 @@ export const CATEGORY_TO_SKILL: Record<string, string> = {
   wardrobe: 'furniture', bed: 'furniture', desk: 'furniture', lock: 'furniture',
   ceiling: 'furniture', floor_tile: 'furniture', wall: 'furniture', door_frame: 'furniture',
   glass_window: 'furniture', curtain: 'furniture', screen_window: 'furniture', drying_rack: 'furniture',
-  office: 'other',
+  projector: 'office', computer: 'office', monitor: 'office', keyboard: 'office', mouse: 'office', speakers: 'office', screen: 'office',
   other_item: 'other',
 };
-export const REPAIRMAN_SKILL_OPTIONS = ['furniture', 'water', 'electricity', 'other'] as const;
+export const REPAIRMAN_SKILL_OPTIONS = ['furniture', 'water', 'electricity', 'other', 'office'] as const;
 export const CATEGORY_LABEL: Record<string, string> = {
-  water: '热水类', electricity: '家电类', furniture: '综合类',
+  water: '热水类', electricity: '家电类', furniture: '综合类', office: '教学办公类',
   other: '其他类',
 };
 export const PRIORITY_LABEL: Record<string, string> = {

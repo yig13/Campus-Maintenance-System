@@ -10,7 +10,6 @@ DORM_BUILDINGS = [building for group in DORM_BUILDING_GROUPS.values() for buildi
 DORM_APARTMENT_BUILDINGS = set(DORM_BUILDING_GROUPS["学生公寓"])
 
 # 叶子故障分类 → 维修员技能大类。
-# 技能键沿用旧账号中已保存的 water/electricity/furniture/other 值。
 CATEGORY_TO_SKILL = {
     # 综合类：综合维修由水电、设施/家具技能共同覆盖
     "lamp": "electricity",
@@ -41,8 +40,15 @@ CATEGORY_TO_SKILL = {
     # 家电类
     "ac": "electricity",
     # 洗衣机暂停报修，因此不进入可派单分类
+    # 教学办公类
+    "projector": "office",
+    "computer": "office",
+    "monitor": "office",
+    "keyboard": "office",
+    "mouse": "office",
+    "speakers": "office",
+    "screen": "office",
     # 其他类
-    "office": "other",
     "other_item": "other",
 }
 
@@ -51,6 +57,7 @@ SKILL_LABELS = {
     "electricity": "家电类",
     "furniture": "综合类",
     "other": "其他类",
+    "office": "教学办公类",
 }
 VALID_REPAIRMAN_SKILLS = set(SKILL_LABELS)
 

@@ -239,7 +239,7 @@ export default function AdminView({ token }: { token: string | null }) {
     const group = CATEGORY_DISPLAY_GROUP[category];
     if (group) pieTotals.set(group, (pieTotals.get(group) || 0) + count);
   });
-  const pieData = (['appliance', 'general', 'other', 'hotWater'] as const)
+  const pieData = (['appliance', 'general', 'office', 'other', 'hotWater'] as const)
     .filter((group) => (pieTotals.get(group) || 0) > 0)
     .map((group) => ({
       name: t(`category_${group}`),
