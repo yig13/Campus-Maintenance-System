@@ -38,6 +38,10 @@ export default function Signup() {
       setError('请填写所有必填项');
       return;
     }
+    if (!/^\d{8,9}$/.test(form.userId.trim())) {
+      setError('学号/工号必须为8~9位数字');
+      return;
+    }
     if (form.password !== form.confirmPassword) {
       setError('两次输入的密码不一致');
       return;
@@ -119,11 +123,13 @@ export default function Signup() {
                 <label className="block text-sm font-medium text-foreground mb-1">学号/工号 <span className="text-red-500">*</span></label>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  maxLength={9}
                   autoComplete="off"
                   required
                   value={form.userId}
-                  onChange={(e) => handleChange('userId', e.target.value)}
-                  placeholder="请输入9位学号/工号"
+                  onChange={(e) => handleChange('userId', e.target.value.replace(/\D/g, '').slice(0, 9))}
+                  placeholder="请输入8~9位学号/工号"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 />
               </div>

@@ -31,8 +31,8 @@ async def register(payload: SignupRequest):
         raise HTTPException(status_code=400, detail="姓名无效，请填写正确的中文姓名")
     if not phone_pattern.match(phone):
         raise HTTPException(status_code=400, detail="手机号码无效，请填写正确的号码")
-    if len(student_id) != 9 or not student_id.isdigit():
-        raise HTTPException(status_code=400, detail="学号/工号无效，请填写9位学号/工号")
+    if not re.fullmatch(r"[0-9]{8,9}", student_id):
+        raise HTTPException(status_code=400, detail="学号/工号无效，请填写8~9位学号/工号")
     if building not in DORM_BUILDINGS:
         raise HTTPException(status_code=400, detail="楼栋选择无效")
     if not PASSWORD_PATTERN.match(payload.password):
