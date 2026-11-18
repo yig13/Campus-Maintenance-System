@@ -229,9 +229,9 @@ async def update_profile(payload: UpdateProfileRequest, current_user: dict = Dep
 async def change_password(payload: ChangePasswordRequest, current_user: dict = Depends(verify_token)):
     user_id = current_user.get("userId", "")
     PASSWORD_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^\s]{6,10}$")
-    if not PASSWORD_PATTERN.match(payload.password):
+    if not PASSWORD_PATTERN.match(payload.newPassword):
         raise HTTPException(status_code=400, detail="密码需包含大小写字母和数字，6-10位")
-    if payload.confirmPassword is not None and payload.password != payload.confirmPassword:
+    if payload.confirmNewPassword is not None and payload.newPassword != payload.confirmNewPassword:
         raise HTTPException(status_code=400, detail="两次输入的密码不一致")
 
     conn = get_db()

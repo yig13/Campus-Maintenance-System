@@ -87,6 +87,56 @@ def get_stats(_current_user: dict = Depends(require_admin)):
             LIMIT 5
         """).fetchall()
         parts_consumed_stats = [{"name": r["name"] or "已删备件", "count": r["count"], "totalCost": float(f"{r['totalCost']:.2f}")} for r in parts_consumed_rows]
+
+        # 维修人员绩效：工单量、完成量、平均维修耗时、SLA 达标率
+        repairman_perf_rows = conn.execute(
+            """
+            SELECT u.id, u.name, u.studentId AS userId,
+                   COUNT(r.id) AS repairCount,
+                   COALESCE(SUM(CASE WHEN r.status IN ('closed', 'pending_evaluation') THEN 1 ELSE 0 END), 0) AS completedCount,
+                   AVG(CASE WHEN r.status IN ('closed', 'pending_evaluation')
+                            THEN (julianday(r.updatedAt) - julianday(r.createdAt)) * 24 END) AS avgRepairHours,
+                   COALESCE(SUM(CASE WHEN (r.status IN ('waiting', 'ready', 'in_progress') AND r.slaDueDate < ?)
+                                      OR (r.status IN ('pending_evaluation', 'closed') AND r.updatedAt > r.slaDueDate)
+                                 THEN 1 ELSE 0 END), 0) AS breachedCount
+            FROM users u
+            LEFT JOIN repairs r ON r.assignedTo = u.id
+            WHERE u.role = 'repairman'
+            GROUP BY u.id, u.name, u.studentId
+            ORDER BY repairCount DESC, u.name ASC
+            """,
+            (now_str,),
+        ).fetchall()
+
+        rating_rows = conn.execute(
+            """
+            SELECT r.assignedTo AS repairmanId,
+                   AVG(rv.rating) AS avgRating,
+                   COUNT(*) AS reviewCount
+            FROM reviews rv
+            JOIN repairs r ON rv.requestId = r.id
+            WHERE r.assignedTo IS NOT NULL
+            GROUP BY r.assignedTo
+            """
+        ).fetchall()
+        rating_map = {row["repairmanId"]: row for row in rating_rows}
+
+        repairman_performance = []
+        for row in repairman_perf_rows:
+            total = row["repairCount"] or 0
+            breached = row["breachedCount"] or 0
+            review = rating_map.get(row["id"])
+            repairman_performance.append({
+                "id": row["id"],
+                "name": row["name"],
+                "userId": row["userId"],
+                "repairCount": total,
+                "completedCount": row["completedCount"] or 0,
+                "avgRating": round(float(review["avgRating"]), 2) if review and review["avgRating"] is not None else None,
+                "reviewCount": review["reviewCount"] if review else 0,
+                "avgRepairHours": round(float(row["avgRepairHours"]), 2) if row["avgRepairHours"] is not None else None,
+                "slaComplianceRate": round((total - breached) / total, 4) if total > 0 else None,
+            })
     finally:
         conn.close()
 
@@ -110,6 +160,7 @@ def get_stats(_current_user: dict = Depends(require_admin)):
             "averageResponseTimeHours": float(f"{avg_response_time:.2f}"),
             "totalCost": float(f"{total_cost:.2f}"),
             "partsConsumedStats": parts_consumed_stats,
+            "repairmanPerformance": repairman_performance,
         }
     _stats_cache["data"] = stats_data
     _stats_cache["expires_at"] = time.monotonic() + _STATS_CACHE_SECONDS

@@ -32,6 +32,7 @@ export default function AdminView({ token }: { token: string | null }) {
   const { language, t } = useLanguage();
   const { user: currentUser } = useAuth();
   const [tab, setTab] = useState<'repairs' | 'stats' | 'parts' | 'users'>('repairs');
+  const [statsTab, setStatsTab] = useState<'repairs' | 'people' | 'parts'>('repairs');
   const [repairs, setRepairs] = useState<RepairRequest[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [repairmen, setRepairmen] = useState<User[]>([]);
@@ -253,6 +254,11 @@ export default function AdminView({ token }: { token: string | null }) {
     { name: t('status_rejected'), count: stats.rejectedRequests || 0, color: '#ef4444' }
   ] : [];
 
+  const repairmanPerformance = stats?.repairmanPerformance ?? [];
+  const slaTextColor = (rate: number) => rate >= 0.9 ? 'text-emerald-600' : rate >= 0.7 ? 'text-amber-600' : 'text-red-600';
+  const slaBarColor = (rate: number) => rate >= 0.9 ? 'bg-emerald-500' : rate >= 0.7 ? 'bg-amber-500' : 'bg-red-500';
+  const formatRepairHours = (hours: number) => hours < 1 ? `${Math.max(1, Math.round(hours * 60))} 分钟` : `${hours.toFixed(1)} 小时`;
+
   const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#6b7280'];
 
   return (
@@ -424,211 +430,389 @@ export default function AdminView({ token }: { token: string | null }) {
       )}
 
       {/* Stats Tab */}
-
-      {tab === 'stats' && stats && (
+      {tab === 'stats' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
-            {[
-              { label: '总报修数', value: stats.totalRequests, color: 'bg-blue-50 text-blue-700', icon: ClipboardList },
-              { label: '待接单', value: stats.pendingRequests, color: 'bg-yellow-50 text-yellow-700', icon: Clock },
-              { label: '维修中', value: stats.inProgressRequests, color: 'bg-purple-50 text-purple-700', icon: Wrench },
-              { label: '已完成', value: stats.completedRequests, color: 'bg-green-50 text-green-700', icon: CheckCircle },
-              { label: '物料开销', value: stats.totalCost !== undefined ? `￥${stats.totalCost.toFixed(2)}` : '￥0.00', color: 'bg-red-50 text-red-700', icon: Wrench },
-              { label: 'SLA达标率', value: stats.slaComplianceRate !== undefined ? `${(stats.slaComplianceRate * 100).toFixed(1)}%` : 'N/A', color: 'bg-emerald-50 text-emerald-700', icon: Shield },
-              { label: '平均完成耗时', value: stats.averageResponseTimeHours !== undefined ? `${stats.averageResponseTimeHours.toFixed(1)}h` : 'N/A', color: 'bg-indigo-50 text-indigo-700', icon: Clock },
-            ].map(({ label, value, color, icon: Icon }) => (
-              <div key={label} className={`rounded-2xl p-4 ${color}`}>
-                <Icon className="w-5 h-5 mb-2" />
-                <p className="text-2xl font-bold">{value}</p>
-                <p className="text-xs font-medium mt-0.5">{label}</p>
-              </div>
+          {/* Stats sub-tabs */}
+          <div className="flex gap-1 bg-muted rounded-xl p-1">
+            {([
+              ['repairs', language === 'zh' ? '报修统计' : 'Repair Stats', ClipboardList],
+              ['people', language === 'zh' ? '绩效统计' : 'Users & Repairmen', Users],
+              ['parts', language === 'zh' ? '备件统计' : 'Parts Stats', Wrench],
+            ] as const).map(([key, label, Icon]) => (
+              <button key={key} onClick={() => setStatsTab(key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-3 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition ${
+                  statsTab === key ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}>
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{label}</span>
+              </button>
             ))}
           </div>
 
-
-          {stats.trendData && stats.trendData.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
-              <h4 className="font-semibold text-foreground mb-4">近期报修趋势</h4>
-              <div className="w-full">
-                <ResponsiveContainer width="100%" height={240}>
-                  <LineChart data={stats.trendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{ stroke: '#e5e7eb', strokeWidth: 2 }} contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }} />
-                    <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+          {!stats ? (
+            <div className="flex items-center justify-center py-16">
+              <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin" />
             </div>
-          )}
-
-          <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
-            <h4 className="font-semibold text-foreground mb-4">
-              {language === 'zh' ? '各楼栋报修数量' : 'Repair Requests by Building'}
-            </h4>
-            {(stats.buildingStats?.length ?? 0) > 0 ? (
-              <div className="w-full">
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={stats.buildingStats} margin={{ top: 10, right: 10, left: -25, bottom: 28 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    <XAxis
-                      dataKey="building"
-                      stroke="#9ca3af"
-                      fontSize={10}
-                      tickLine={false}
-                      axisLine={false}
-                      interval={0}
-                      angle={-35}
-                      textAnchor="end"
-                      height={55}
-                    />
-                    <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip
-                      cursor={{ fill: '#f3f4f6', opacity: 0.5 }}
-                      formatter={(value: number) => [value, language === 'zh' ? '报修单' : 'Requests']}
-                      contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }}
-                    />
-                    <Bar dataKey="count" name={language === 'zh' ? '报修单数' : 'Requests'} fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={48} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                {language === 'zh' ? '暂无楼栋报修数据' : 'No building repair data yet'}
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 柱状图：工单状态分布 */}
-            <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
-              <h4 className="font-semibold text-foreground mb-4">工单状态分布</h4>
-              <div className="w-full">
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={barData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{ fill: '#f3f4f6', opacity: 0.5 }} contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }} />
-                    <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={40}>
-                      {barData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* 饼图：报修类型分布 */}
-            <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
-              <h4 className="font-semibold text-foreground mb-4">报修类型占比</h4>
-              {pieData.length > 0 ? (
-                <div className="h-[240px] w-full flex-1 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="h-[180px] w-[180px] flex-shrink-0">
-                    <ResponsiveContainer width="100%" height={180}>
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={45}
-                          outerRadius={65}
-                          paddingAngle={3}
-                          dataKey="value"
-                        >
-                          {pieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="flex flex-col gap-1.5 flex-1 w-full pl-0 sm:pl-2">
-                    {pieData.map((entry, index) => (
-                      <div key={entry.name} className="flex items-center justify-between text-xs w-full">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="w-2.5 h-2.5 rounded-full inline-block flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                          <span className="text-muted-foreground font-medium truncate">{entry.name}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 font-semibold text-foreground flex-shrink-0">
-                          <span>{entry.value}</span>
-                          <span className="text-muted-foreground/50 font-normal">({stats.totalRequests > 0 ? ((entry.value / stats.totalRequests) * 100).toFixed(0) : 0}%)</span>
-                        </div>
+          ) : (
+            <>
+              {/* 报修统计 */}
+              {statsTab === 'repairs' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                    {[
+                      { label: '总报修数', value: stats.totalRequests, color: 'bg-blue-50 text-blue-700', icon: ClipboardList },
+                      { label: '待接单', value: stats.pendingRequests, color: 'bg-yellow-50 text-yellow-700', icon: Clock },
+                      { label: '维修中', value: stats.inProgressRequests, color: 'bg-purple-50 text-purple-700', icon: Wrench },
+                      { label: '已完成', value: stats.completedRequests, color: 'bg-green-50 text-green-700', icon: CheckCircle },
+                      { label: 'SLA达标率', value: stats.slaComplianceRate !== undefined ? `${(stats.slaComplianceRate * 100).toFixed(1)}%` : 'N/A', color: 'bg-emerald-50 text-emerald-700', icon: Shield },
+                      { label: '平均完成耗时', value: stats.averageResponseTimeHours !== undefined ? `${stats.averageResponseTimeHours.toFixed(1)}h` : 'N/A', color: 'bg-indigo-50 text-indigo-700', icon: Clock },
+                    ].map(({ label, value, color, icon: Icon }) => (
+                      <div key={label} className={`rounded-2xl p-4 ${color}`}>
+                        <Icon className="w-5 h-5 mb-2" />
+                        <p className="text-2xl font-bold">{value}</p>
+                        <p className="text-xs font-medium mt-0.5">{label}</p>
                       </div>
                     ))}
                   </div>
+
+                  {stats.trendData && stats.trendData.length > 0 && (
+                    <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
+                      <h4 className="font-semibold text-foreground mb-4">近期报修趋势</h4>
+                      <div className="w-full">
+                        <ResponsiveContainer width="100%" height={240}>
+                          <LineChart data={stats.trendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                            <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                            <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                            <Tooltip cursor={{ stroke: '#e5e7eb', strokeWidth: 2 }} contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }} />
+                            <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
+                    <h4 className="font-semibold text-foreground mb-4">
+                      {language === 'zh' ? '各楼栋报修数量' : 'Repair Requests by Building'}
+                    </h4>
+                    {(stats.buildingStats?.length ?? 0) > 0 ? (
+                      <div className="w-full">
+                        <ResponsiveContainer width="100%" height={240}>
+                          <BarChart data={stats.buildingStats} margin={{ top: 10, right: 10, left: -25, bottom: 28 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                            <XAxis
+                              dataKey="building"
+                              stroke="#9ca3af"
+                              fontSize={10}
+                              tickLine={false}
+                              axisLine={false}
+                              interval={0}
+                              angle={-35}
+                              textAnchor="end"
+                              height={55}
+                            />
+                            <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                            <Tooltip
+                              cursor={{ fill: '#f3f4f6', opacity: 0.5 }}
+                              formatter={(value: number) => [value, language === 'zh' ? '报修单' : 'Requests']}
+                              contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }}
+                            />
+                            <Bar dataKey="count" name={language === 'zh' ? '报修单数' : 'Requests'} fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                        {language === 'zh' ? '暂无楼栋报修数据' : 'No building repair data yet'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 柱状图：工单状态分布 */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
+                      <h4 className="font-semibold text-foreground mb-4">工单状态分布</h4>
+                      <div className="w-full">
+                        <ResponsiveContainer width="100%" height={240}>
+                          <BarChart data={barData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                            <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                            <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                            <Tooltip cursor={{ fill: '#f3f4f6', opacity: 0.5 }} contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }} />
+                            <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={40}>
+                              {barData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* 饼图：报修类型分布 */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col min-h-[300px]">
+                      <h4 className="font-semibold text-foreground mb-4">报修类型占比</h4>
+                      {pieData.length > 0 ? (
+                        <div className="h-[240px] w-full flex-1 flex flex-col sm:flex-row items-center justify-between gap-4">
+                          <div className="h-[180px] w-[180px] flex-shrink-0">
+                            <ResponsiveContainer width="100%" height={180}>
+                              <PieChart>
+                                <Pie
+                                  data={pieData}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={45}
+                                  outerRadius={65}
+                                  paddingAngle={3}
+                                  dataKey="value"
+                                >
+                                  {pieData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '12px' }} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="flex flex-col gap-1.5 flex-1 w-full pl-0 sm:pl-2">
+                            {pieData.map((entry, index) => (
+                              <div key={entry.name} className="flex items-center justify-between text-xs w-full">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-2.5 h-2.5 rounded-full inline-block flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                                  <span className="text-muted-foreground font-medium truncate">{entry.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 font-semibold text-foreground flex-shrink-0">
+                                  <span>{entry.value}</span>
+                                  <span className="text-muted-foreground/50 font-normal">({stats.totalRequests > 0 ? ((entry.value / stats.totalRequests) * 100).toFixed(0) : 0}%)</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">暂无类型统计数据</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">暂无类型统计数据</div>
               )}
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* 用户统计卡片 */}
-            <div className="bg-white rounded-2xl shadow-sm border border-border p-5">
-              <h4 className="font-semibold text-foreground mb-4">用户统计</h4>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: '总用户数', value: stats.totalUsers, color: 'text-primary' },
-                  { label: '注册用户', value: stats.userCount, color: 'text-foreground' },
-                  { label: '维修员', value: stats.repairmanCount, color: 'text-foreground' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-muted/30 rounded-xl p-3 text-center">
-                    <p className={`text-xl font-bold ${color}`}>{value}</p>
-                    <p className="text-[10px] text-muted-foreground font-medium mt-0.5">{label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+              {/* 用户维修人员统计 */}
+              {statsTab === 'people' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* 用户统计卡片 */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-border p-5">
+                      <h4 className="font-semibold text-foreground mb-4">用户统计</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { label: '总用户数', value: stats.totalUsers, color: 'text-primary' },
+                          { label: '注册用户', value: stats.userCount, color: 'text-foreground' },
+                          { label: '维修员', value: stats.repairmanCount, color: 'text-foreground' },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} className="bg-muted/30 rounded-xl p-3 text-center">
+                            <p className={`text-xl font-bold ${color}`}>{value}</p>
+                            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
-            {/* 评分卡片 */}
-            <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col justify-between">
-              <h4 className="font-semibold text-foreground mb-2">平均服务评分</h4>
-              <div className="flex items-center gap-4 py-2">
-                <span className="text-4xl font-extrabold text-foreground tracking-tight">{stats.avgRating}</span>
-                <div className="flex flex-col gap-1">
-                  <div className="flex gap-0.5">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Star key={s} className={`w-5 h-5 ${s <= Math.round(Number(stats.avgRating)) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'}`} />
-                    ))}
+                    {/* 评分卡片 */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-border p-5 flex flex-col justify-between">
+                      <h4 className="font-semibold text-foreground mb-2">平均服务评分</h4>
+                      <div className="flex items-center gap-4 py-2">
+                        <span className="text-4xl font-extrabold text-foreground tracking-tight">{stats.avgRating}</span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex gap-0.5">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star key={s} className={`w-5 h-5 ${s <= Math.round(Number(stats.avgRating)) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'}`} />
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground font-medium">
+                            {language === 'zh' ? `基于 ${stats.reviewCount} 条工单评价` : `Based on ${stats.reviewCount} reviews`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground font-medium">基于已有工单评价</p>
+
+                  {/* 维修人员绩效列表 */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-border p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-foreground">维修人员绩效</h4>
+                      <span className="text-xs text-muted-foreground">
+                        {language === 'zh' ? `共 ${repairmanPerformance.length} 名维修员` : `${repairmanPerformance.length} repairmen`}
+                      </span>
+                    </div>
+
+                    {repairmanPerformance.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                        <Users className="w-10 h-10 mb-2" />
+                        <p className="text-sm">暂无维修人员数据</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* 桌面端表格 */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-border text-muted-foreground font-medium">
+                                <th className="pb-3 pr-3">维修人员</th>
+                                <th className="pb-3 pr-3">工单数量</th>
+                                <th className="pb-3 pr-3">平均服务评分</th>
+                                <th className="pb-3 pr-3">平均维修时间</th>
+                                <th className="pb-3 text-right">SLA达标率</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/60">
+                              {repairmanPerformance.map((p) => (
+                                <tr key={p.id} className="hover:bg-muted/10">
+                                  <td className="py-3 pr-3">
+                                    <p className="font-semibold text-foreground">{p.name}</p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                      {p.userId ? `学号/工号：${p.userId}` : '—'}
+                                    </p>
+                                  </td>
+                                  <td className="py-3 pr-3">
+                                    <p className="font-semibold text-foreground">{p.repairCount} 单</p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">已完成 {p.completedCount}</p>
+                                  </td>
+                                  <td className="py-3 pr-3">
+                                    {p.avgRating !== null ? (
+                                      <div className="flex items-center gap-1">
+                                        <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+                                        <span className="font-semibold text-foreground">{p.avgRating.toFixed(1)}</span>
+                                        <span className="text-muted-foreground">({p.reviewCount})</span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted-foreground">暂无评分</span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 pr-3">
+                                    {p.avgRepairHours !== null ? (
+                                      <span className="font-semibold text-foreground">{formatRepairHours(p.avgRepairHours)}</span>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 text-right">
+                                    {p.slaComplianceRate !== null ? (
+                                      <div className="flex flex-col items-end gap-1">
+                                        <span className={`font-semibold ${slaTextColor(p.slaComplianceRate)}`}>
+                                          {(p.slaComplianceRate * 100).toFixed(1)}%
+                                        </span>
+                                        <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                                          <div className={`h-full rounded-full ${slaBarColor(p.slaComplianceRate)}`}
+                                            style={{ width: `${p.slaComplianceRate * 100}%` }} />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* 移动端卡片 */}
+                        <div className="md:hidden space-y-2">
+                          {repairmanPerformance.map((p) => (
+                            <div key={p.id} className="rounded-xl border border-border p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-foreground truncate">{p.name}</p>
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                                    {p.userId ? `学号/工号：${p.userId}` : '—'}
+                                  </p>
+                                </div>
+                                <span className={`text-xs font-semibold shrink-0 ${p.slaComplianceRate !== null ? slaTextColor(p.slaComplianceRate) : 'text-muted-foreground'}`}>
+                                  SLA {p.slaComplianceRate !== null ? `${(p.slaComplianceRate * 100).toFixed(1)}%` : '—'}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                                <div className="rounded-lg bg-muted/30 py-1.5">
+                                  <p className="text-sm font-bold text-foreground">{p.repairCount}</p>
+                                  <p className="text-[10px] text-muted-foreground">工单数量</p>
+                                </div>
+                                <div className="rounded-lg bg-muted/30 py-1.5">
+                                  <p className="text-sm font-bold text-foreground">
+                                    {p.avgRating !== null ? p.avgRating.toFixed(1) : '—'}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">平均评分</p>
+                                </div>
+                                <div className="rounded-lg bg-muted/30 py-1.5">
+                                  <p className="text-sm font-bold text-foreground">
+                                    {p.avgRepairHours !== null ? `${formatRepairHours(p.avgRepairHours)}` : '—'}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">平均维修时间</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
+              )}
 
-          {/* 备件消耗排行统计 */}
-          {stats.partsConsumedStats && stats.partsConsumedStats.length > 0 && (
-            <div className="bg-white rounded-2xl border border-border p-5 shadow-sm">
-              <h4 className="font-semibold text-foreground mb-4 flex items-center gap-1.5">
-                📊 备件消耗及材料成本分析 (Top 5)
-              </h4>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground font-medium pb-2">
-                      <th className="pb-2">备件名称</th>
-                      <th className="pb-2">消耗总数量</th>
-                      <th className="pb-2 text-right">消耗总成本</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60">
-                    {stats.partsConsumedStats.map((item) => (
-                      <tr key={item.name} className="hover:bg-muted/10">
-                        <td className="py-2.5 font-semibold text-foreground">{item.name}</td>
-                        <td className="py-2.5 text-muted-foreground">{item.count} 件</td>
-                        <td className="py-2.5 text-right font-bold text-primary">￥{item.totalCost.toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+              {/* 备件统计 */}
+              {statsTab === 'parts' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="rounded-2xl p-5 bg-red-50 text-red-700">
+                      <Wrench className="w-5 h-5 mb-2" />
+                      <p className="text-2xl font-bold">￥{(stats.totalCost ?? 0).toFixed(2)}</p>
+                      <p className="text-xs font-medium mt-0.5">材料总成本</p>
+                    </div>
+                    <div className="rounded-2xl p-5 bg-blue-50 text-blue-700">
+                      <ClipboardList className="w-5 h-5 mb-2" />
+                      <p className="text-2xl font-bold">
+                        {stats.partsConsumedStats?.reduce((sum, item) => sum + item.count, 0) ?? 0}
+                      </p>
+                      <p className="text-xs font-medium mt-0.5">Top 5 备件消耗总量</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-border p-5 shadow-sm">
+                    <h4 className="font-semibold text-foreground mb-4 flex items-center gap-1.5">
+                      📊 备件消耗及材料成本分析 (Top 5)
+                    </h4>
+                    {stats.partsConsumedStats && stats.partsConsumedStats.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-border text-muted-foreground font-medium pb-2">
+                              <th className="pb-2">备件名称</th>
+                              <th className="pb-2">消耗总数量</th>
+                              <th className="pb-2 text-right">消耗总成本</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {stats.partsConsumedStats.map((item) => (
+                              <tr key={item.name} className="hover:bg-muted/10">
+                                <td className="py-2.5 font-semibold text-foreground">{item.name}</td>
+                                <td className="py-2.5 text-muted-foreground">{item.count} 件</td>
+                                <td className="py-2.5 text-right font-bold text-primary">￥{item.totalCost.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                        <Wrench className="w-10 h-10 mb-2" />
+                        <p className="text-sm">暂无备件消耗数据</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

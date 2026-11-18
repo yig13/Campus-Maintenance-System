@@ -48,7 +48,7 @@ def seed():
         ("管理员", "admin123", "admin", "admin001", None, None, "13800000000", None),
         ("用户测试", "user123", "user", "20230001", "公寓2栋", "1-302", "13800000001", None),
         ("维修测试水电", "tech123", "repairman", "STAFF001", None, None, "13800000002", "water,electricity"),
-        ("维修测试综合", "tech123", "repairman", "STAFF002", None, None, "13800000003", "furniture,other"),
+        ("维修测试综合", "tech123", "repairman", "STAFF002", None, None, "13800000003", "furniture,other,office"),
     ]
 
     now = now_str()
@@ -109,7 +109,8 @@ def seed():
         ("desk", "low", ["办公桌抽屉滑轨卡住，无法顺畅拉开", "桌椅连接处松动，使用时有明显晃动"]),
         ("lock", "high", ["公共区域门锁无法正常闭合", "门锁卡顿，钥匙转动困难"]),
         ("leak", "urgent", ["天花板持续渗水，地面已有积水", "屋面漏水导致室内墙面和地面潮湿"]),
-        ("office", "normal", ["办公设备无法正常开机，请检查电源和设备接口", "公共区域打印设备卡纸且无法继续工作"]),
+        ("projector", "normal", ["教室投影仪无法开机，电源指示灯不亮", "投影画面频繁闪烁且偏色，影响正常教学"]),
+        ("computer", "normal", ["办公电脑开机后黑屏，主机运行但无显示信号", "教学电脑运行卡顿并频繁自动重启"]),
     ]
     statuses = [("closed", 0.45), ("pending_evaluation", 0.18),
                 ("in_progress", 0.12), ("waiting", 0.12), ("ready", 0.08), ("rejected", 0.05)]

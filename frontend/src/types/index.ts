@@ -34,6 +34,18 @@ export interface RepairRequest {
   slaBreached?: number;
 }
 
+export interface RepairmanPerformance {
+  id: string;
+  name: string;
+  userId?: string;
+  repairCount: number;
+  completedCount: number;
+  avgRating: number | null;
+  reviewCount: number;
+  avgRepairHours: number | null;
+  slaComplianceRate: number | null;
+}
+
 export interface Stats {
   totalRequests: number;
   pendingRequests: number;
@@ -52,6 +64,7 @@ export interface Stats {
   averageResponseTimeHours?: number;
   totalCost?: number;
   partsConsumedStats?: { name: string; count: number; totalCost: number }[];
+  repairmanPerformance?: RepairmanPerformance[];
 }
 
 export interface Part {
